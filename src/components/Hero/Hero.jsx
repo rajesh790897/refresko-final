@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { gsap } from 'gsap'
 import './Hero.css'
@@ -128,12 +129,23 @@ const Hero = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 2 }}
         >
-          <button className="btn-primary magnetic-btn skewed-btn interactive">
-            <span>REGISTER</span>
-          </button>
-          <button className="btn-secondary magnetic-btn glass interactive">
-            <span>CONTRIBUTE</span>
-          </button>
+          <div className="cta-group">
+            <Link to="/register" className="btn-primary magnetic-btn skewed-btn interactive">
+              <span>REGISTER FOR EVENTS</span>
+            </Link>
+            <p className="cta-description">
+              For participants from other colleges
+            </p>
+          </div>
+          
+          <div className="cta-group">
+            <Link to="/login" className="btn-secondary magnetic-btn glass interactive">
+              <span>SKF STUDENT LOGIN</span>
+            </Link>
+            <p className="cta-description">
+              Already an SKF student? Login here
+            </p>
+          </div>
         </motion.div>
       </div>
 

@@ -100,6 +100,23 @@
   flex-wrap: wrap;
 }
 
+.cta-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.cta-description {
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  text-align: center;
+  max-width: 250px;
+  line-height: 1.4;
+  opacity: 0.8;
+}
+
 .btn-primary {
   background: var(--color-primary);
   border: none;
@@ -112,6 +129,8 @@
   position: relative;
   overflow: hidden;
   transition: all 0.3s ease;
+  text-decoration: none;
+  display: inline-block;
 }
 
 .btn-primary::before {
@@ -147,6 +166,8 @@
   font-size: 1.1rem;
   font-weight: 600;
   letter-spacing: 0.1em;
+  text-decoration: none;
+  display: inline-block;
   padding: 18px 50px;
   transition: all 0.3s ease;
 }
