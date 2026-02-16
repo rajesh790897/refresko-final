@@ -1,0 +1,217 @@
+import { useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Link, useNavigate } from 'react-router-dom'
+import CustomCursor from '../../components/CustomCursor/CustomCursor'
+import EventManagement from '../../components/SuperAdmin/EventManagement'
+import PaymentAmountManagement from '../../components/SuperAdmin/PaymentAmountManagement'
+import PaymentManagement from '../../components/Admin/PaymentManagement'
+import Analytics from '../../components/Admin/Analytics'
+import StudentManagement from '../../components/SuperAdmin/StudentManagement'
+import AdminLoginManagement from '../../components/SuperAdmin/AdminLoginManagement'
+import './SuperAdmin.css'
+
+const SuperAdmin = () => {
+  const [activeTab, setActiveTab] = useState('events')
+  const navigate = useNavigate()
+
+  const handleLogout = () => {
+    // Add logout logic here
+    navigate('/')
+  }
+
+  return (
+    <div className="super-admin-dashboard">
+      <CustomCursor />
+      <div className="hex-grid-overlay" />
+      
+      {/* Header */}
+      <header className="super-admin-header">
+        <div className="super-admin-header-content">
+          <div className="super-admin-logo">
+            <Link to="/">
+              <span className="logo-main">REFRESKO</span>
+              <span className="logo-year">2026</span>
+            </Link>
+          </div>
+          
+          <div className="super-admin-title">
+            <h1>SUPER ADMIN DASHBOARD</h1>
+            <p>Supreme Knowledge Foundation - Master Control</p>
+          </div>
+
+          <button className="logout-btn interactive" onClick={handleLogout}>
+            <span>LOGOUT</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      {/* Navigation Tabs */}
+      <nav className="super-admin-nav">
+        <div className="super-admin-nav-container">
+          <motion.button
+            className={`nav-tab interactive ${activeTab === 'events' ? 'active' : ''}`}
+            onClick={() => setActiveTab('events')}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+              <line x1="16" y1="2" x2="16" y2="6"/>
+              <line x1="8" y1="2" x2="8" y2="6"/>
+              <line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+            <span>EVENT MANAGEMENT</span>
+          </motion.button>
+
+          <motion.button
+            className={`nav-tab interactive ${activeTab === 'amounts' ? 'active' : ''}`}
+            onClick={() => setActiveTab('amounts')}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="12" y1="1" x2="12" y2="23"/>
+              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+            </svg>
+            <span>PAYMENT AMOUNTS</span>
+          </motion.button>
+
+          <motion.button
+            className={`nav-tab interactive ${activeTab === 'payments' ? 'active' : ''}`}
+            onClick={() => setActiveTab('payments')}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
+              <line x1="1" y1="10" x2="23" y2="10"/>
+            </svg>
+            <span>PAYMENTS & RECEIPTS</span>
+          </motion.button>
+
+          <motion.button
+            className={`nav-tab interactive ${activeTab === 'analytics' ? 'active' : ''}`}
+            onClick={() => setActiveTab('analytics')}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="12" y1="20" x2="12" y2="10"/>
+              <line x1="18" y1="20" x2="18" y2="4"/>
+              <line x1="6" y1="20" x2="6" y2="16"/>
+            </svg>
+            <span>ANALYTICS</span>
+          </motion.button>
+
+          <motion.button
+            className={`nav-tab interactive ${activeTab === 'students' ? 'active' : ''}`}
+            onClick={() => setActiveTab('students')}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+            <span>STUDENT ACCOUNTS</span>
+          </motion.button>
+
+          <motion.button
+            className={`nav-tab interactive ${activeTab === 'admin-logins' ? 'active' : ''}`}
+            onClick={() => setActiveTab('admin-logins')}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            <span>ADMIN LOGIN CONTROL</span>
+          </motion.button>
+        </div>
+      </nav>
+
+      {/* Content */}
+      <main className="super-admin-content">
+        <AnimatePresence mode="wait">
+          {activeTab === 'events' && (
+            <motion.div
+              key="events"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <EventManagement />
+            </motion.div>
+          )}
+
+          {activeTab === 'amounts' && (
+            <motion.div
+              key="amounts"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <PaymentAmountManagement />
+            </motion.div>
+          )}
+
+          {activeTab === 'payments' && (
+            <motion.div
+              key="payments"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <PaymentManagement />
+            </motion.div>
+          )}
+
+          {activeTab === 'analytics' && (
+            <motion.div
+              key="analytics"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <Analytics />
+            </motion.div>
+          )}
+
+          {activeTab === 'students' && (
+            <motion.div
+              key="students"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <StudentManagement />
+            </motion.div>
+          )}
+
+          {activeTab === 'admin-logins' && (
+            <motion.div
+              key="admin-logins"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <AdminLoginManagement />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </main>
+    </div>
+  )
+}
+
+export default SuperAdmin
