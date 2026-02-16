@@ -1,6 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import QRCode from 'qrcode'
+import { isSupabaseConfigured, supabase } from '../lib/supabaseClient'
+import { getActivePaymentOption, getUpiPayload, loadPaymentConfig } from '../lib/paymentConfig'
 import './PaymentGateway.css'
 
 const PaymentGateway = () => {
@@ -13,9 +16,21 @@ const PaymentGateway = () => {
   const [paymentScreenshot, setPaymentScreenshot] = useState(null)
   const [paymentScreenshotName, setPaymentScreenshotName] = useState('')
   const [formError, setFormError] = useState('')
+  const [paymentConfig, setPaymentConfig] = useState(() => loadPaymentConfig())
+  const [paymentQrCodeUrl, setPaymentQrCodeUrl] = useState('')
+
+  const activePaymentOption = useMemo(
+    () => getActivePaymentOption(paymentConfig),
+    [paymentConfig]
+  )
+  const isFoodIncluded = Boolean(activePaymentOption?.includeFood)
 
   useEffect(() => {
     document.body.classList.add('system-cursor')
+    const configFromStorage = loadPaymentConfig()
+    setPaymentConfig(configFromStorage)
+    const currentOption = getActivePaymentOption(configFromStorage)
+    const requiresFoodPreference = Boolean(currentOption?.includeFood)
 
     // Check authentication
     const isAuthenticated = localStorage.getItem('isAuthenticated')
@@ -28,11 +43,12 @@ const PaymentGateway = () => {
 
     // Get food preference
     const savedFoodPreference = localStorage.getItem('foodPreference')
-    if (!savedFoodPreference) {
+    const normalizedSavedFood = savedFoodPreference && savedFoodPreference !== 'null' ? savedFoodPreference : ''
+    if (requiresFoodPreference && !normalizedSavedFood) {
       navigate('/dashboard')
       return
     }
-    setFoodPreference(savedFoodPreference)
+    setFoodPreference(requiresFoodPreference ? normalizedSavedFood : 'NOT_INCLUDED')
 
     // Get student profile
     const savedProfile = localStorage.getItem('studentProfile')
@@ -40,10 +56,58 @@ const PaymentGateway = () => {
       setStudentProfile(JSON.parse(savedProfile))
     }
 
+    const refreshPaymentConfig = () => {
+      setPaymentConfig(loadPaymentConfig())
+    }
+
+    const handleStorageUpdate = (event) => {
+      if (event.key === 'paymentGatewayConfig') {
+        refreshPaymentConfig()
+      }
+    }
+
+    window.addEventListener('storage', handleStorageUpdate)
+    window.addEventListener('paymentConfigUpdated', refreshPaymentConfig)
+
     return () => {
       document.body.classList.remove('system-cursor')
+      window.removeEventListener('storage', handleStorageUpdate)
+      window.removeEventListener('paymentConfigUpdated', refreshPaymentConfig)
     }
   }, [navigate])
+
+  useEffect(() => {
+    let isMounted = true
+
+    const generatePaymentQrCode = async () => {
+      if (!activePaymentOption) {
+        setPaymentQrCodeUrl('')
+        return
+      }
+
+      try {
+        const qrDataUrl = await QRCode.toDataURL(getUpiPayload(activePaymentOption), {
+          width: 220,
+          margin: 1,
+          errorCorrectionLevel: 'H'
+        })
+
+        if (isMounted) {
+          setPaymentQrCodeUrl(qrDataUrl)
+        }
+      } catch {
+        if (isMounted) {
+          setPaymentQrCodeUrl('')
+        }
+      }
+    }
+
+    generatePaymentQrCode()
+
+    return () => {
+      isMounted = false
+    }
+  }, [activePaymentOption])
 
   const handleScreenshotUpload = (event) => {
     const file = event.target.files?.[0]
@@ -73,6 +137,10 @@ const PaymentGateway = () => {
   const handleConfirmPayment = () => {
     const normalizedUtr = utrNumber.trim().toUpperCase()
     const currentStudentId = studentProfile?.studentId || ''
+    const savedFoodPreference = localStorage.getItem('foodPreference')
+    const normalizedSavedFood = savedFoodPreference && savedFoodPreference !== 'null' ? savedFoodPreference : ''
+    const effectiveFoodPreference = isFoodIncluded ? (foodPreference || normalizedSavedFood || '') : null
+    const payableAmount = Number(activePaymentOption?.amount) || 600
 
     if (!paymentScreenshot) {
       setFormError('Please upload payment screenshot before submitting')
@@ -81,6 +149,16 @@ const PaymentGateway = () => {
 
     if (!normalizedUtr) {
       setFormError('Please enter UTR number')
+      return
+    }
+
+    if (isFoodIncluded && !effectiveFoodPreference) {
+      setFormError('Food preference is missing. Please go back and select food preference again.')
+      return
+    }
+
+    if (!activePaymentOption) {
+      setFormError('Payment configuration is unavailable. Please contact admin.')
       return
     }
 
@@ -109,7 +187,7 @@ const PaymentGateway = () => {
     setPaymentStatus('processing')
     
     // Simulate payment processing
-    setTimeout(() => {
+    setTimeout(async () => {
       const txnId = `TXN${Date.now()}`
       setTransactionId(txnId)
       setPaymentStatus('success')
@@ -118,7 +196,26 @@ const PaymentGateway = () => {
       localStorage.setItem('paymentCompleted', 'true')
       localStorage.setItem('transactionId', txnId)
       localStorage.setItem('paymentUTR', normalizedUtr)
+      localStorage.setItem('paymentFoodPreference', effectiveFoodPreference === null ? 'null' : effectiveFoodPreference)
       localStorage.setItem('paymentScreenshotName', paymentScreenshotName)
+
+      const cachedProfileRaw = localStorage.getItem('studentProfile')
+      if (cachedProfileRaw) {
+        try {
+          const cachedProfile = JSON.parse(cachedProfileRaw)
+          const nextProfile = {
+            ...cachedProfile,
+            payment_completion: true,
+            gate_pass_created: false,
+            payment_approved: 'pending',
+            food_included: isFoodIncluded,
+            food_preference: effectiveFoodPreference
+          }
+          localStorage.setItem('studentProfile', JSON.stringify(nextProfile))
+        } catch {
+          // ignore malformed profile cache
+        }
+      }
 
       const submittedPayment = {
         id: `PAY${Date.now()}`,
@@ -128,13 +225,14 @@ const PaymentGateway = () => {
         email: studentProfile.email || '',
         department: studentProfile.department || 'N/A',
         year: studentProfile.year || 'N/A',
-        amount: 500,
+        amount: payableAmount,
         date: new Date().toISOString(),
         status: 'pending',
         transactionId: txnId,
         screenshotName: paymentScreenshotName,
         hasScreenshot: Boolean(paymentScreenshot),
-        foodPreference
+        foodPreference: effectiveFoodPreference,
+        foodIncluded: isFoodIncluded
       }
 
       let existingSubmissions = []
@@ -147,6 +245,26 @@ const PaymentGateway = () => {
 
       const updatedSubmissions = [submittedPayment, ...existingSubmissions].slice(0, 200)
       localStorage.setItem('paymentSubmissions', JSON.stringify(updatedSubmissions))
+
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const studentCode = (studentProfile.studentId || '').trim().toUpperCase()
+          if (studentCode) {
+            await supabase
+              .from('students')
+              .update({
+                payment_completion: true,
+                gate_pass_created: false,
+                payment_approved: 'pending',
+                food_included: isFoodIncluded,
+                food_preference: effectiveFoodPreference
+              })
+              .eq('student_code', studentCode)
+          }
+        } catch (error) {
+          console.error('Unable to sync payment status to Supabase:', error)
+        }
+      }
 
       if (paymentScreenshot) {
         try {
@@ -215,27 +333,17 @@ const PaymentGateway = () => {
                 <div className="detail-item">
                   <span className="item-label">Food Preference</span>
                   <span className="item-value food-badge">
-                    {foodPreference === 'VEG' ? '🥗 Vegetarian' : '🍗 Non-Vegetarian'}
+                    {isFoodIncluded
+                      ? (foodPreference === 'VEG' ? '🥗 Vegetarian' : '🍗 Non-Vegetarian')
+                      : '🍽️ Food Not Included'}
                   </span>
                 </div>
               </div>
 
               <div className="payment-breakdown">
-                <div className="breakdown-item">
-                  <span>Base Registration</span>
-                  <span>₹300</span>
-                </div>
-                <div className="breakdown-item">
-                  <span>Event Access Pass</span>
-                  <span>₹150</span>
-                </div>
-                <div className="breakdown-item">
-                  <span>Merchandise Voucher</span>
-                  <span>₹50</span>
-                </div>
                 <div className="breakdown-total">
                   <span>Total Amount</span>
-                  <span className="total-amount">₹500</span>
+                  <span className="total-amount">₹{activePaymentOption?.amount || 600}</span>
                 </div>
               </div>
             </div>
@@ -246,45 +354,21 @@ const PaymentGateway = () => {
               
               <div className="qr-code-container">
                 <div className="qr-code-wrapper">
-                  {/* QR Code SVG - Placeholder */}
-                  <svg viewBox="0 0 200 200" className="payment-qr">
-                    <rect x="0" y="0" width="200" height="200" fill="white"/>
-                    {/* QR Pattern Simulation */}
-                    <rect x="20" y="20" width="40" height="40" fill="black"/>
-                    <rect x="140" y="20" width="40" height="40" fill="black"/>
-                    <rect x="20" y="140" width="40" height="40" fill="black"/>
-                    <rect x="70" y="20" width="10" height="10" fill="black"/>
-                    <rect x="90" y="20" width="10" height="10" fill="black"/>
-                    <rect x="110" y="20" width="10" height="10" fill="black"/>
-                    <rect x="70" y="40" width="10" height="10" fill="black"/>
-                    <rect x="100" y="40" width="10" height="10" fill="black"/>
-                    <rect x="70" y="70" width="10" height="10" fill="black"/>
-                    <rect x="90" y="70" width="10" height="10" fill="black"/>
-                    <rect x="110" y="70" width="10" height="10" fill="black"/>
-                    <rect x="130" y="70" width="10" height="10" fill="black"/>
-                    <rect x="70" y="90" width="10" height="10" fill="black"/>
-                    <rect x="100" y="90" width="10" height="10" fill="black"/>
-                    <rect x="120" y="90" width="10" height="10" fill="black"/>
-                    <rect x="70" y="110" width="10" height="10" fill="black"/>
-                    <rect x="90" y="110" width="10" height="10" fill="black"/>
-                    <rect x="110" y="110" width="10" height="10" fill="black"/>
-                    <rect x="140" y="110" width="10" height="10" fill="black"/>
-                    <rect x="160" y="90" width="10" height="10" fill="black"/>
-                    <rect x="150" y="130" width="10" height="10" fill="black"/>
-                    <rect x="170" y="140" width="10" height="10" fill="black"/>
-                    <rect x="80" y="140" width="10" height="10" fill="black"/>
-                    <rect x="100" y="150" width="10" height="10" fill="black"/>
-                    <rect x="120" y="140" width="10" height="10" fill="black"/>
-                    <rect x="90" y="170" width="10" height="10" fill="black"/>
-                    <rect x="110" y="170" width="10" height="10" fill="black"/>
-                    <rect x="130" y="170" width="10" height="10" fill="black"/>
-                  </svg>
+                  {paymentQrCodeUrl ? (
+                    <img
+                      src={paymentQrCodeUrl}
+                      alt={`Payment QR for ₹${activePaymentOption?.amount || 600}`}
+                      className="payment-qr"
+                    />
+                  ) : (
+                    <div className="payment-qr payment-qr-unavailable">QR unavailable</div>
+                  )}
                   <div className="qr-glow-effect"></div>
                 </div>
                 
                 <div className="payment-info">
-                  <p className="upi-id">UPI ID: <span>refresko@upi</span></p>
-                  <p className="amount-display">Amount: <span>₹500</span></p>
+                  <p className="upi-id">UPI ID: <span>{activePaymentOption?.upiId || 'refresko@upi'}</span></p>
+                  <p className="amount-display">Amount: <span>₹{activePaymentOption?.amount || 600}</span></p>
                 </div>
               </div>
 

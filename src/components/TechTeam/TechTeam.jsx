@@ -6,7 +6,6 @@ const teamMembers = [
   {
     id: 1,
     name: 'ANKIT RAJAK',
-    role: 'Full Stack Developer',
     department: 'CSE 3rd Year',
     initial: 'AR',
     color: '#FF0033',
@@ -15,7 +14,6 @@ const teamMembers = [
   {
     id: 2,
     name: 'KOUSHIK DAS',
-    role: 'Full Stack Developer',
     department: 'CSE 3rd Year',
     initial: 'KD',
     color: '#FF1A4D',
@@ -24,7 +22,6 @@ const teamMembers = [
   {
     id: 3,
     name: 'PRITAM GHOSH',
-    role: 'Full Stack Developer',
     department: 'CSE 3rd Year',
     initial: 'PG',
     color: '#FF3366'
@@ -32,26 +29,26 @@ const teamMembers = [
   {
     id: 4,
     name: 'PRANJAL DAS',
-    role: 'Full Stack Developer',
-    department: 'CSE 3rd Year',
+    department: 'CYS 3rd Year',
     initial: 'PD',
-    color: '#CC0029'
+    color: '#CC0029',
+    image: '/pranjal.webp'
   },
   {
     id: 5,
-    name: 'RAJESH MONDOL',
-    role: 'Full Stack Developer',
-    department: 'CSE 3rd Year',
+    name: 'RAJESH MONDAL',
+    department: 'BCA 2nd Year',
     initial: 'RM',
-    color: '#E6002E'
+    color: '#E6002E',
+    image: '/RajeshMondol.jpeg'
   },
   {
     id: 6,
     name: 'ANKIT PAL',
-    role: 'Full Stack Developer',
-    department: 'CSE 3rd Year',
+    department: 'BCA 2nd Year',
     initial: 'AP',
-    color: '#FF4D79'
+    color: '#FF4D79',
+    image: '/AnkitPal.jpeg'
   }
 ]
 

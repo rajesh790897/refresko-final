@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import { isSupabaseConfigured, supabase } from '../lib/supabaseClient'
 import './ProfileSetup.css'
 
 const ProfileSetup = () => {
@@ -14,6 +15,7 @@ const ProfileSetup = () => {
     phone: ''
   })
   const [errors, setErrors] = useState({})
+  const [originalStudentCode, setOriginalStudentCode] = useState('')
 
   useEffect(() => {
     document.body.classList.add('system-cursor')
@@ -30,6 +32,59 @@ const ProfileSetup = () => {
     if (profileCompleted === 'true') {
       navigate('/dashboard')
     }
+
+    const prefilledProfileRaw = localStorage.getItem('prefilledProfile')
+    if (prefilledProfileRaw) {
+      try {
+        const prefilledProfile = JSON.parse(prefilledProfileRaw)
+        const prefilledDepartment = prefilledProfile.department || prefilledProfile.stream || ''
+        const prefilledYear = prefilledProfile.year || ''
+
+        setFormData((prev) => ({
+          ...prev,
+          name: prefilledProfile.name || prev.name,
+          studentId: prefilledProfile.studentId || prev.studentId,
+          email: prefilledProfile.email || prev.email,
+          phone: prefilledProfile.phone || prev.phone,
+          department: prefilledDepartment || prev.department,
+          year: prefilledYear || prev.year
+        }))
+        setOriginalStudentCode(prefilledProfile.studentId || '')
+      } catch {
+        // Ignore parsing errors and continue with empty form
+      }
+    }
+
+    const hydrateDepartmentFromDatabase = async () => {
+      if (!isSupabaseConfigured || !supabase) return
+
+      const prefilledProfileRawInner = localStorage.getItem('prefilledProfile')
+      if (!prefilledProfileRawInner) return
+
+      try {
+        const prefilled = JSON.parse(prefilledProfileRawInner)
+        const studentCode = prefilled.studentId
+        if (!studentCode) return
+
+        const { data, error } = await supabase
+          .from('students')
+          .select('department, year')
+          .eq('student_code', studentCode)
+          .maybeSingle()
+
+        if (error || !data) return
+
+        setFormData((prev) => ({
+          ...prev,
+          department: data.department || prev.department,
+          year: data.year || prev.year
+        }))
+      } catch {
+        // Silent fail, user can still fill manually
+      }
+    }
+
+    hydrateDepartmentFromDatabase()
 
     return () => {
       document.body.classList.remove('system-cursor')
@@ -60,14 +115,14 @@ const ProfileSetup = () => {
 
     if (!formData.studentId.trim()) {
       newErrors.studentId = 'Student ID is required'
-    } else if (!/^SKF\d{7}$/.test(formData.studentId)) {
-      newErrors.studentId = 'Student ID must be in format: SKF followed by 7 digits (e.g., SKF2024001)'
+    } else if (!/^[^\\\s]+(\\[^\\\s]+){3,}$/.test(formData.studentId.trim())) {
+      newErrors.studentId = 'Student code must be in format like BTECH\\2022\\CSE\\0001'
     }
 
     if (!formData.email.trim()) {
       newErrors.email = 'Email is required'
-    } else if (!/^[^\s@]+@skf\.edu$/.test(formData.email)) {
-      newErrors.email = 'Email must be a valid SKF email (ending with @skf.edu)'
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      newErrors.email = 'Please enter a valid email address'
     }
 
     if (!formData.department.trim()) {
@@ -88,12 +143,66 @@ const ProfileSetup = () => {
     return Object.keys(newErrors).length === 0
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
 
     if (validateForm()) {
+      if (isSupabaseConfigured && supabase) {
+        const originalCode = (originalStudentCode || '').trim()
+        const currentCode = formData.studentId.trim()
+
+        const payload = {
+          name: formData.name.trim(),
+          student_code: currentCode.toUpperCase(),
+          email: formData.email.trim().toLowerCase(),
+          phone: formData.phone.trim(),
+          department: formData.department.trim(),
+          year: formData.year,
+          profile_completed: true,
+          payment_completion: false,
+          gate_pass_created: false,
+          payment_approved: 'pending',
+          food_included: false,
+          food_preference: null
+        }
+
+        let updatedRows = []
+        let updateError = null
+
+        if (originalCode) {
+          const firstAttempt = await supabase
+            .from('students')
+            .update(payload)
+            .eq('student_code', originalCode)
+            .select('id')
+
+          updatedRows = firstAttempt.data || []
+          updateError = firstAttempt.error
+        }
+
+        if ((!updatedRows || updatedRows.length === 0) && currentCode && currentCode !== originalCode) {
+          const secondAttempt = await supabase
+            .from('students')
+            .update(payload)
+            .eq('student_code', currentCode)
+            .select('id')
+
+          updatedRows = secondAttempt.data || []
+          updateError = secondAttempt.error
+        }
+
+        if (updateError || !updatedRows || updatedRows.length === 0) {
+          setErrors((prev) => ({
+            ...prev,
+            studentId: 'Unable to update profile in database. Check student code or database policy.'
+          }))
+          return
+        }
+      }
+
       // Save profile data to localStorage
       localStorage.setItem('studentProfile', JSON.stringify(formData))
+      localStorage.setItem('prefilledProfile', JSON.stringify(formData))
       localStorage.setItem('profileCompleted', 'true')
       
       // Redirect to dashboard
@@ -192,7 +301,7 @@ const ProfileSetup = () => {
                 name="studentId"
                 value={formData.studentId}
                 onChange={handleChange}
-                placeholder="SKF2024001"
+                placeholder="BTECH\2022\CSE\0001"
                 className={`form-input ${errors.studentId ? 'error' : ''}`}
               />
               {errors.studentId && <span className="error-message">{errors.studentId}</span>}
@@ -228,24 +337,15 @@ const ProfileSetup = () => {
 
             <div className="form-group">
               <label htmlFor="department">Department *</label>
-              <select
+              <input
+                type="text"
                 id="department"
                 name="department"
                 value={formData.department}
                 onChange={handleChange}
+                placeholder="Enter department"
                 className={`form-input ${errors.department ? 'error' : ''}`}
-              >
-                <option value="">Select Department</option>
-                <option value="Computer Science">Computer Science</option>
-                <option value="Information Technology">Information Technology</option>
-                <option value="Electronics and Communication">Electronics and Communication</option>
-                <option value="Mechanical Engineering">Mechanical Engineering</option>
-                <option value="Civil Engineering">Civil Engineering</option>
-                <option value="Electrical Engineering">Electrical Engineering</option>
-                <option value="MBA">MBA</option>
-                <option value="MCA">MCA</option>
-                <option value="Other">Other</option>
-              </select>
+              />
               {errors.department && <span className="error-message">{errors.department}</span>}
             </div>
 

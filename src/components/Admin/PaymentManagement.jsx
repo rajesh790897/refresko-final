@@ -1,29 +1,136 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
+import { isSupabaseConfigured, supabase } from '../../lib/supabaseClient'
 import './PaymentManagement.css'
+
+const PAGE_SIZE = 20
+
+const formatFoodPreference = (value, foodIncluded = true) => {
+  if (foodIncluded === false || value === null || value === 'null') return 'Food Not Included'
+  if (!value) return 'N/A'
+
+  const normalized = String(value).trim().toUpperCase()
+  if (!normalized) return 'N/A'
+
+  if (normalized === 'VEG' || normalized === 'VEGETARIAN') return 'Veg'
+  if (normalized === 'NON-VEG' || normalized === 'NONVEG' || normalized === 'NON VEGETARIAN') return 'Non-Veg'
+
+  return String(value).trim()
+}
+
+const resolveFoodIncluded = (payment) => {
+  if (typeof payment?.foodIncluded === 'boolean') {
+    return payment.foodIncluded
+  }
+
+  const rawPreference = payment?.foodPreference ?? payment?.paymentFoodPreference
+  if (rawPreference === null || rawPreference === 'null') {
+    return false
+  }
+
+  return true
+}
+
+const getPaymentApprovedStatus = (payment) => {
+  const explicit = (payment?.payment_approved || payment?.paymentApproved || '').toString().trim().toLowerCase()
+  if (explicit === 'approved' || explicit === 'declined' || explicit === 'pending') {
+    return explicit
+  }
+
+  const normalizedStatus = (payment?.status || '').toString().trim().toLowerCase()
+  if (normalizedStatus === 'completed') return 'approved'
+  if (normalizedStatus === 'declined') return 'declined'
+  return 'pending'
+}
 
 const normalizePayments = (records) => {
   if (!Array.isArray(records)) return []
 
-  return records.map((payment, index) => ({
-    id: payment.id || `PAY${index + 1}`,
-    utrNo: payment.utrNo || payment.paymentUTR || payment.transactionId || 'N/A',
-    studentCode: payment.studentCode || payment.studentId || 'N/A',
-    studentName: payment.studentName || payment.name || 'N/A',
-    email: payment.email || 'N/A',
-    college: payment.college || 'N/A',
-    department: payment.department || 'N/A',
-    year: payment.year || 'N/A',
-    event: payment.event || 'Refresko 2026 Registration',
-    amount: Number(payment.amount) || 500,
-    status: payment.status || 'pending',
-    date: payment.date || new Date().toISOString(),
-    transactionId: payment.transactionId || 'N/A',
-    paymentMethod: payment.paymentMethod || 'UPI',
-    screenshot: payment.screenshot || payment.paymentScreenshot || null,
-    screenshotName: payment.screenshotName || payment.paymentScreenshotName || ''
-  }))
+  return records.map((payment, index) => {
+    const foodIncluded = resolveFoodIncluded(payment)
+    const rawFoodPreference = payment.foodPreference ?? payment.paymentFoodPreference ?? (foodIncluded ? localStorage.getItem('paymentFoodPreference') : null)
+
+    return {
+      id: payment.id || `PAY${index + 1}`,
+      utrNo: payment.utrNo || payment.paymentUTR || payment.transactionId || 'N/A',
+      studentCode: payment.studentCode || payment.studentId || 'N/A',
+      studentName: payment.studentName || payment.name || 'N/A',
+      email: payment.email || 'N/A',
+      college: payment.college || 'N/A',
+      department: payment.department || 'N/A',
+      year: payment.year || 'N/A',
+      event: payment.event || 'Refresko 2026 Registration',
+      foodPreference: formatFoodPreference(rawFoodPreference, foodIncluded),
+      foodIncluded,
+      amount: Number(payment.amount) || 600,
+      status: payment.status || 'pending',
+      paymentApproved: getPaymentApprovedStatus(payment),
+      date: payment.date || new Date().toISOString(),
+      transactionId: payment.transactionId || 'N/A',
+      paymentMethod: payment.paymentMethod || 'UPI',
+      screenshot: payment.screenshot || payment.paymentScreenshot || null,
+      screenshotName: payment.screenshotName || payment.paymentScreenshotName || '',
+      reviewedAt: payment.reviewedAt || ''
+    }
+  })
+}
+
+const csvEscape = (value) => {
+  const stringValue = value === null || value === undefined ? '' : String(value)
+  return `"${stringValue.replace(/"/g, '""')}"`
+}
+
+const toCsvContent = (records) => {
+  const headers = [
+    'Payment_ID',
+    'UTR_No',
+    'Student_Code',
+    'Student_Name',
+    'Email',
+    'College',
+    'Department',
+    'Year',
+    'Event',
+    'Food_Preference',
+    'Amount',
+    'Payment_Status',
+    'Payment_Approved',
+    'Transaction_ID',
+    'Payment_Method',
+    'Date_Time',
+    'Screenshot_Name',
+    'Has_Screenshot',
+    'Reviewed_At'
+  ]
+
+  const rows = records.map((payment) => {
+    const line = [
+      payment.id,
+      payment.utrNo,
+      payment.studentCode,
+      payment.studentName,
+      payment.email,
+      payment.college,
+      payment.department,
+      payment.year,
+      payment.event,
+      payment.foodPreference,
+      payment.amount,
+      payment.status,
+      payment.paymentApproved,
+      payment.transactionId,
+      payment.paymentMethod,
+      payment.date,
+      payment.screenshotName,
+      Boolean(payment.screenshot || payment.screenshotName),
+      payment.reviewedAt
+    ]
+
+    return line.map(csvEscape).join(',')
+  })
+
+  return [headers.join(','), ...rows].join('\n')
 }
 
 const loadPaymentsFromLocalStorage = () => {
@@ -60,7 +167,10 @@ const loadPaymentsFromLocalStorage = () => {
         email: parsedProfile.email || 'N/A',
         department: parsedProfile.department || 'N/A',
         year: parsedProfile.year || 'N/A',
-        amount: 500,
+        foodPreference: formatFoodPreference(
+          localStorage.getItem('paymentFoodPreference') || localStorage.getItem('foodPreference')
+        ),
+        amount: 600,
         status: 'pending',
         date: new Date().toISOString(),
         transactionId: legacyTxnId || 'N/A',
@@ -77,7 +187,9 @@ const PaymentManagement = () => {
   const [payments, setPayments] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
+  const [currentPage, setCurrentPage] = useState(1)
   const [selectedPayment, setSelectedPayment] = useState(null)
+  const [selectedScreenshot, setSelectedScreenshot] = useState(null)
 
   useEffect(() => {
     const refreshPayments = () => {
@@ -112,6 +224,20 @@ const PaymentManagement = () => {
     return matchesSearch && matchesStatus
   })
 
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm, filterStatus])
+
+  const totalPages = Math.max(1, Math.ceil(filteredPayments.length / PAGE_SIZE))
+  const pageStartIndex = (currentPage - 1) * PAGE_SIZE
+  const paginatedPayments = filteredPayments.slice(pageStartIndex, pageStartIndex + PAGE_SIZE)
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages)
+    }
+  }, [currentPage, totalPages])
+
   const totalRevenue = payments
     .filter(p => p.status === 'completed')
     .reduce((sum, p) => sum + p.amount, 0)
@@ -124,9 +250,144 @@ const PaymentManagement = () => {
     setSelectedPayment(payment)
   }
 
+  const handleUpdatePaymentStatus = async (paymentId, status) => {
+    try {
+      const savedPayments = localStorage.getItem('paymentSubmissions')
+      const parsedPayments = savedPayments ? JSON.parse(savedPayments) : []
+      const nextStatus = status === 'approved' ? 'completed' : status
+
+      const updatedPayments = Array.isArray(parsedPayments)
+        ? parsedPayments.map((payment) => {
+            const currentId = payment.id || ''
+            if (currentId !== paymentId) return payment
+
+            return {
+              ...payment,
+              status: nextStatus,
+              payment_approved: status === 'approved' ? 'approved' : 'declined',
+              reviewedAt: new Date().toISOString()
+            }
+          })
+        : []
+
+      localStorage.setItem('paymentSubmissions', JSON.stringify(updatedPayments))
+      window.dispatchEvent(new Event('paymentSubmissionsUpdated'))
+
+      setPayments(normalizePayments(updatedPayments))
+      const updatedPayment = updatedPayments.find((payment) => payment.id === paymentId)
+
+      if (updatedPayment) {
+        const updatedProfileRaw = localStorage.getItem('studentProfile')
+        if (updatedProfileRaw) {
+          try {
+            const updatedProfile = JSON.parse(updatedProfileRaw)
+            const sameStudent =
+              updatedProfile.studentId === (updatedPayment.studentCode || updatedPayment.studentId) ||
+              updatedProfile.email === updatedPayment.email
+
+            if (sameStudent) {
+              localStorage.setItem(
+                'studentProfile',
+                JSON.stringify({
+                  ...updatedProfile,
+                  payment_completion: status === 'declined' ? false : true,
+                  gate_pass_created: status === 'approved',
+                  payment_approved: status === 'approved' ? 'approved' : 'declined'
+                })
+              )
+            }
+          } catch {
+            // ignore malformed profile cache
+          }
+        }
+
+        if (isSupabaseConfigured && supabase) {
+          try {
+            const studentCode = (updatedPayment.studentCode || updatedPayment.studentId || '').trim().toUpperCase()
+            if (studentCode) {
+              await supabase
+                .from('students')
+                .update({
+                  payment_completion: status === 'declined' ? false : true,
+                  gate_pass_created: status === 'approved',
+                  payment_approved: status === 'approved' ? 'approved' : 'declined'
+                })
+                .eq('student_code', studentCode)
+            }
+          } catch (error) {
+            console.error('Unable to sync admin payment decision to Supabase:', error)
+          }
+        }
+      }
+
+      setSelectedPayment((previous) => (
+        previous && previous.id === paymentId
+          ? {
+              ...previous,
+              status: nextStatus,
+              paymentApproved: status === 'approved' ? 'approved' : 'declined'
+            }
+          : previous
+      ))
+    } catch {
+      // ignore malformed localStorage payloads
+    }
+  }
+
   const handleDownloadReceipt = (payment) => {
     // Implement receipt download logic
     console.log('Downloading receipt for:', payment.id)
+  }
+
+  const getPaymentScreenshotSource = (payment) => {
+    if (!payment) return ''
+
+    if (typeof payment.screenshot === 'string' && payment.screenshot.trim()) {
+      return payment.screenshot
+    }
+
+    const keys = [payment.utrNo, payment.transactionId, payment.id].filter(Boolean)
+    for (const key of keys) {
+      const storedScreenshot = localStorage.getItem(`paymentScreenshot:${key}`)
+      if (storedScreenshot) {
+        return storedScreenshot
+      }
+    }
+
+    return ''
+  }
+
+  const handleViewUploadedImage = (payment) => {
+    const screenshotSource = getPaymentScreenshotSource(payment)
+    if (!screenshotSource) {
+      window.alert('No uploaded payment screenshot found for this transaction.')
+      return
+    }
+
+    setSelectedScreenshot({
+      src: screenshotSource,
+      name: payment?.screenshotName || 'Payment Screenshot',
+      paymentId: payment?.id || ''
+    })
+  }
+
+  const handleExportCsv = () => {
+    if (payments.length === 0) {
+      return
+    }
+
+    const csvContent = toCsvContent(payments)
+    const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+
+    link.href = url
+    link.setAttribute('download', `payments_receipts_export_${timestamp}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
   }
 
   return (
@@ -232,6 +493,14 @@ const PaymentManagement = () => {
           >
             Pending ({payments.filter(p => p.status === 'pending').length})
           </button>
+          <button
+            className="filter-btn export-csv-btn"
+            onClick={handleExportCsv}
+            disabled={payments.length === 0}
+            title="Export all payment and receipt records to CSV"
+          >
+            Export CSV
+          </button>
         </div>
       </motion.div>
 
@@ -252,11 +521,12 @@ const PaymentManagement = () => {
               <th>Year</th>
               <th>Amount</th>
               <th>Date &amp; Time</th>
+              <th>Payment Approved</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {filteredPayments.map((payment, index) => (
+            {paginatedPayments.map((payment, index) => (
               <motion.tr
                 key={payment.id}
                 initial={{ opacity: 0, x: -20 }}
@@ -271,6 +541,11 @@ const PaymentManagement = () => {
                 <td className="amount">₹{payment.amount}</td>
                 <td>{new Date(payment.date).toLocaleString()}</td>
                 <td>
+                  <span className={`status-badge ${payment.paymentApproved}`}>
+                    {payment.paymentApproved}
+                  </span>
+                </td>
+                <td>
                   <div className="action-buttons">
                     <button
                       className="action-btn view"
@@ -280,6 +555,18 @@ const PaymentManagement = () => {
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
                         <circle cx="12" cy="12" r="3"/>
+                      </svg>
+                    </button>
+                    <button
+                      className="action-btn proof"
+                      onClick={() => handleViewUploadedImage(payment)}
+                      title="View Uploaded Image"
+                      disabled={!getPaymentScreenshotSource(payment)}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                        <path d="M21 15l-5-5L5 21"/>
                       </svg>
                     </button>
                     <button
@@ -299,6 +586,28 @@ const PaymentManagement = () => {
             ))}
           </tbody>
         </table>
+
+        {filteredPayments.length > 0 && (
+          <div className="payments-pagination">
+            <button
+              className="pagination-btn"
+              onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+            >
+              Previous
+            </button>
+            <span className="pagination-info">
+              Page {currentPage} of {totalPages} • Showing {paginatedPayments.length} of {filteredPayments.length}
+            </span>
+            <button
+              className="pagination-btn"
+              onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages}
+            >
+              Next
+            </button>
+          </div>
+        )}
 
         {filteredPayments.length === 0 && (
           <div className="no-results">
@@ -351,8 +660,8 @@ const PaymentManagement = () => {
                   <span className="value">{selectedPayment.email}</span>
                 </div>
                 <div className="detail-row">
-                  <span className="label">College:</span>
-                  <span className="value">{selectedPayment.college}</span>
+                  <span className="label">Food Preference:</span>
+                  <span className="value">{formatFoodPreference(selectedPayment.foodPreference)}</span>
                 </div>
                 <div className="detail-row">
                   <span className="label">Department:</span>
@@ -365,10 +674,6 @@ const PaymentManagement = () => {
                 <div className="detail-row">
                   <span className="label">Event:</span>
                   <span className="value">{selectedPayment.event}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="label">Payment Method:</span>
-                  <span className="value">{selectedPayment.paymentMethod}</span>
                 </div>
                 {selectedPayment.screenshot && (
                   <div className="detail-row">
@@ -390,10 +695,32 @@ const PaymentManagement = () => {
                     {selectedPayment.status}
                   </span>
                 </div>
+                <div className="detail-row">
+                  <span className="label">Payment Approved:</span>
+                  <span className={`status-badge ${selectedPayment.paymentApproved || getPaymentApprovedStatus(selectedPayment)}`}>
+                    {selectedPayment.paymentApproved || getPaymentApprovedStatus(selectedPayment)}
+                  </span>
+                </div>
               </div>
 
               <div className="receipt-footer">
                 <p>Thank you for participating in Refresko 2026!</p>
+                <div className="receipt-admin-actions">
+                  <button
+                    className="receipt-action-btn approve"
+                    onClick={() => handleUpdatePaymentStatus(selectedPayment.id, 'approved')}
+                    disabled={selectedPayment.status === 'completed'}
+                  >
+                    Approve
+                  </button>
+                  <button
+                    className="receipt-action-btn decline"
+                    onClick={() => handleUpdatePaymentStatus(selectedPayment.id, 'declined')}
+                    disabled={selectedPayment.status === 'declined'}
+                  >
+                    Decline
+                  </button>
+                </div>
                 <button
                   className="download-receipt-btn"
                   onClick={() => handleDownloadReceipt(selectedPayment)}
@@ -406,6 +733,36 @@ const PaymentManagement = () => {
                   Download PDF
                 </button>
               </div>
+            </div>
+          </motion.div>
+        </div>,
+        document.body
+      )}
+
+      {selectedScreenshot && createPortal(
+        <div className="modal-overlay" onClick={() => setSelectedScreenshot(null)}>
+          <motion.div
+            className="screenshot-modal"
+            initial={{ opacity: 0, scale: 0.92 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.92 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="screenshot-modal-header">
+              <h3>Uploaded Payment Image</h3>
+              <button
+                className="close-btn"
+                onClick={() => setSelectedScreenshot(null)}
+              >
+                ×
+              </button>
+            </div>
+            <div className="screenshot-modal-content">
+              <img src={selectedScreenshot.src} alt={selectedScreenshot.name} className="screenshot-preview-image" />
+              <p className="screenshot-caption">
+                {selectedScreenshot.name}
+                {selectedScreenshot.paymentId ? ` • ${selectedScreenshot.paymentId}` : ''}
+              </p>
             </div>
           </motion.div>
         </div>,

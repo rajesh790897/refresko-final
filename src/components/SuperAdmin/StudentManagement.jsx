@@ -1,71 +1,119 @@
-import { useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
+import { isSupabaseConfigured, supabase } from '../../lib/supabaseClient'
 import './StudentManagement.css'
 
-// Sample students data
-const sampleStudentsData = [
-  {
-    id: 'STU001',
-    name: 'Rajesh Kumar',
-    email: 'rajesh.kumar@example.com',
-    phone: '+91 98765 43210',
-    college: 'Supreme Knowledge Foundation',
-    department: 'Computer Science',
-    year: '3rd Year',
-    rollNumber: 'CS2021001',
-    registeredEvents: ['EVT001', 'EVT002'],
-    status: 'active',
-    lastLogin: '2026-02-10 14:30'
-  },
-  {
-    id: 'STU002',
-    name: 'Priya Sharma',
-    email: 'priya.sharma@example.com',
-    phone: '+91 98765 43211',
-    college: 'Supreme Knowledge Foundation',
-    department: 'Electronics',
-    year: '2nd Year',
-    rollNumber: 'EC2022015',
-    registeredEvents: ['EVT001'],
-    status: 'active',
-    lastLogin: '2026-02-11 09:15'
-  },
-  {
-    id: 'STU003',
-    name: 'Amit Patel',
-    email: 'amit.patel@example.com',
-    phone: '+91 98765 43212',
-    college: 'Supreme Knowledge Foundation',
-    department: 'Mechanical',
-    year: '1st Year',
-    rollNumber: 'ME2023042',
-    registeredEvents: [],
-    status: 'inactive',
-    lastLogin: '2026-01-28 11:20'
-  }
-]
+const PAGE_SIZE = 50
+
+const normalizeApprovalStatus = (value) => {
+  if (!value) return 'pending'
+  const normalized = String(value).trim().toLowerCase()
+  if (normalized === 'approved') return 'approved'
+  if (normalized === 'declined') return 'declined'
+  return 'pending'
+}
+
+const mapStudentRecord = (record) => ({
+  id: record.student_code || record.id,
+  name: record.name || 'N/A',
+  email: record.email || 'N/A',
+  phone: record.phone || 'N/A',
+  college: 'Supreme Knowledge Foundation',
+  department: record.department || 'N/A',
+  year: record.year || 'N/A',
+  rollNumber: record.student_code || 'N/A',
+  registeredEvents: [],
+  status: record.profile_completed === true ? 'active' : 'inactive',
+  paymentCompletion: record.payment_completion === true,
+  gatePassCreated: record.gate_pass_created === true,
+  paymentApproved: normalizeApprovalStatus(record.payment_approved),
+  lastLogin: record.updated_at ? new Date(record.updated_at).toLocaleString() : 'N/A'
+})
 
 const StudentManagement = () => {
-  const [students, setStudents] = useState(sampleStudentsData)
+  const [students, setStudents] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
+  const [currentPage, setCurrentPage] = useState(1)
   const [selectedStudent, setSelectedStudent] = useState(null)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [formData, setFormData] = useState({})
+  const deferredSearchTerm = useDeferredValue(searchTerm)
 
-  const filteredStudents = students.filter(student => {
-    const matchesSearch = 
-      student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      student.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      student.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      student.rollNumber.toLowerCase().includes(searchTerm.toLowerCase())
-    
-    const matchesStatus = filterStatus === 'all' || student.status === filterStatus
+  useEffect(() => {
+    const fetchStudents = async () => {
+      if (!isSupabaseConfigured || !supabase) {
+        setStudents([])
+        return
+      }
 
-    return matchesSearch && matchesStatus
-  })
+      const pageSize = 1000
+      let from = 0
+      let allRows = []
+
+      while (true) {
+        const to = from + pageSize - 1
+        const { data, error } = await supabase
+          .from('students')
+          .select('id, student_code, name, email, phone, department, year, profile_completed, payment_completion, gate_pass_created, payment_approved, updated_at')
+          .order('student_code', { ascending: true })
+          .range(from, to)
+
+        if (error) {
+          setStudents([])
+          return
+        }
+
+        if (!data || data.length === 0) {
+          break
+        }
+
+        allRows = allRows.concat(data)
+
+        if (data.length < pageSize) {
+          break
+        }
+
+        from += pageSize
+      }
+
+      setStudents(allRows.map(mapStudentRecord))
+    }
+
+    fetchStudents()
+  }, [])
+
+  const filteredStudents = useMemo(() => {
+    const normalizedSearch = deferredSearchTerm.trim().toLowerCase()
+
+    return students.filter((student) => {
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        student.name.toLowerCase().includes(normalizedSearch) ||
+        (student.email || '').toLowerCase().includes(normalizedSearch) ||
+        student.id.toLowerCase().includes(normalizedSearch) ||
+        (student.rollNumber || '').toLowerCase().includes(normalizedSearch)
+
+      const matchesStatus = filterStatus === 'all' || student.status === filterStatus
+      return matchesSearch && matchesStatus
+    })
+  }, [students, deferredSearchTerm, filterStatus])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [deferredSearchTerm, filterStatus])
+
+  const totalPages = Math.max(1, Math.ceil(filteredStudents.length / PAGE_SIZE))
+  const pageStartIndex = (currentPage - 1) * PAGE_SIZE
+  const paginatedStudents = filteredStudents.slice(pageStartIndex, pageStartIndex + PAGE_SIZE)
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages)
+    }
+  }, [currentPage, totalPages])
 
   const handleEditStudent = (student) => {
     setSelectedStudent(student)
@@ -177,18 +225,16 @@ const StudentManagement = () => {
               <th>Email</th>
               <th>Department</th>
               <th>Year</th>
-              <th>Status</th>
+              <th>Profile</th>
+              <th>Payment Completion</th>
+              <th>Gate Pass Created</th>
+              <th>Payment Approved</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {filteredStudents.map((student, index) => (
-              <motion.tr
-                key={student.id}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.3, delay: index * 0.05 }}
-              >
+            {paginatedStudents.map((student) => (
+              <tr key={student.id}>
                 <td className="student-id-cell">{student.id}</td>
                 <td className="student-name-cell">{student.name}</td>
                 <td>{student.email}</td>
@@ -197,6 +243,21 @@ const StudentManagement = () => {
                 <td>
                   <span className={`status-badge ${student.status}`}>
                     {student.status}
+                  </span>
+                </td>
+                <td>
+                  <span className={`status-badge ${student.paymentCompletion ? 'flag-true' : 'flag-false'}`}>
+                    {student.paymentCompletion ? 'True' : 'False'}
+                  </span>
+                </td>
+                <td>
+                  <span className={`status-badge ${student.gatePassCreated ? 'flag-true' : 'flag-false'}`}>
+                    {student.gatePassCreated ? 'True' : 'False'}
+                  </span>
+                </td>
+                <td>
+                  <span className={`status-badge ${student.paymentApproved}`}>
+                    {student.paymentApproved}
                   </span>
                 </td>
                 <td>
@@ -215,11 +276,33 @@ const StudentManagement = () => {
                     </button>
                   </div>
                 </td>
-              </motion.tr>
+              </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {filteredStudents.length > 0 && (
+        <div className="students-pagination">
+          <button
+            className="pagination-btn"
+            onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+            disabled={currentPage === 1}
+          >
+            Previous
+          </button>
+          <span className="pagination-info">
+            Page {currentPage} of {totalPages} • Showing {paginatedStudents.length} of {filteredStudents.length}
+          </span>
+          <button
+            className="pagination-btn"
+            onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+            disabled={currentPage === totalPages}
+          >
+            Next
+          </button>
+        </div>
+      )}
 
       {filteredStudents.length === 0 && (
         <div className="no-results">
@@ -264,6 +347,9 @@ const StudentManagement = () => {
                 <div className="full-detail-row"><span>Registered Events</span><strong>{selectedStudent.registeredEvents.length}</strong></div>
                 <div className="full-detail-row"><span>Last Login</span><strong>{selectedStudent.lastLogin}</strong></div>
                 <div className="full-detail-row"><span>Status</span><strong>{selectedStudent.status}</strong></div>
+                <div className="full-detail-row"><span>Payment Completion</span><strong>{selectedStudent.paymentCompletion ? 'True' : 'False'}</strong></div>
+                <div className="full-detail-row"><span>Gate Pass Created</span><strong>{selectedStudent.gatePassCreated ? 'True' : 'False'}</strong></div>
+                <div className="full-detail-row"><span>Payment Approved</span><strong>{selectedStudent.paymentApproved}</strong></div>
               </div>
 
               <div className="form-actions">

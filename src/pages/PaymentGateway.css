@@ -245,6 +245,16 @@
   display: block;
 }
 
+.payment-qr-unavailable {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  background: #fff;
+}
+
 .qr-glow-effect {
   position: absolute;
   inset: -15px;

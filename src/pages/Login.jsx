@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import { isSupabaseConfigured, supabase } from '../lib/supabaseClient'
 import './Login.css'
 
-// Hardcoded credentials
-const VALID_EMAIL = 'student@skf.in'
-const VALID_PASSWORD = 'Student@12345'
+const normalizePhone = (value) => value.replace(/\D/g, '')
 
 const Login = () => {
   const navigate = useNavigate()
   const location = useLocation()
+  const isAdminLoginMode = location.pathname.endsWith('/admin') || new URLSearchParams(location.search).get('role') === 'admin'
   const [formData, setFormData] = useState({
     email: '',
     password: ''
@@ -19,15 +19,13 @@ const Login = () => {
 
   useEffect(() => {
     document.body.classList.add('system-cursor')
-    const params = new URLSearchParams(location.search)
-    const isAdminLoginMode = params.get('role') === 'admin'
 
     // Check if already authenticated
     const isAdminAuthenticated = localStorage.getItem('adminAuthenticated')
     const isAuthenticated = localStorage.getItem('isAuthenticated')
     const profileCompleted = localStorage.getItem('profileCompleted')
 
-    if (isAdminAuthenticated === 'true') {
+    if (isAdminLoginMode && isAdminAuthenticated === 'true') {
       navigate('/admin')
       return
     }
@@ -35,8 +33,6 @@ const Login = () => {
     if (!isAdminLoginMode) {
       if (isAuthenticated && profileCompleted === 'true') {
         navigate('/dashboard')
-      } else if (isAuthenticated && profileCompleted !== 'true') {
-        navigate('/profile-setup')
       }
     }
 
@@ -56,13 +52,13 @@ const Login = () => {
     }
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     setIsLoading(true)
     setError('')
 
-    // Simulate authentication delay
-    setTimeout(() => {
+    // Keep a small delay for UI consistency
+    setTimeout(async () => {
       let adminAccounts = []
       try {
         const savedAdmins = localStorage.getItem('adminAccounts')
@@ -78,30 +74,84 @@ const Login = () => {
           admin.status === 'active'
       )
 
-      if (matchingAdmin) {
+      if (isAdminLoginMode && matchingAdmin) {
+        localStorage.removeItem('isAuthenticated')
         localStorage.setItem('adminAuthenticated', 'true')
         localStorage.setItem('adminLoginEmail', matchingAdmin.email)
         navigate('/admin')
         return
       }
 
-      if (formData.email === VALID_EMAIL && formData.password === VALID_PASSWORD) {
-        // Authentication successful
+      if (isAdminLoginMode) {
+        setError('Invalid credentials. Please try again.')
+        setIsLoading(false)
+        return
+      }
+
+      if (!isSupabaseConfigured || !supabase) {
+        setError('Supabase is not configured. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.')
+        setIsLoading(false)
+        return
+      }
+
+      try {
+        const studentCode = formData.email.trim().toUpperCase()
+        const enteredPhone = normalizePhone(formData.password)
+
+        const { data, error: fetchError } = await supabase
+          .from('students')
+          .select('name, student_code, email, phone, department, year, profile_completed, payment_completion, gate_pass_created, payment_approved, food_included, food_preference')
+          .eq('student_code', studentCode)
+          .maybeSingle()
+
+        if (fetchError) {
+          throw fetchError
+        }
+
+        if (!data) {
+          setError('Student code not found. Please check and try again.')
+          setIsLoading(false)
+          return
+        }
+
+        const dbPhone = normalizePhone(data.phone || '')
+        if (!enteredPhone || enteredPhone !== dbPhone) {
+          setError('Invalid phone number. Please try again.')
+          setIsLoading(false)
+          return
+        }
+
+        const prefilledProfile = {
+          name: data.name || '',
+          studentId: data.student_code || '',
+          email: data.email || '',
+          phone: data.phone || '',
+          department: data.department || '',
+          year: data.year || '',
+          payment_completion: data.payment_completion === true,
+          gate_pass_created: data.gate_pass_created === true,
+          payment_approved: data.payment_approved || 'pending',
+          food_included: data.food_included === true,
+          food_preference: data.food_preference || null
+        }
+
         localStorage.removeItem('adminAuthenticated')
         localStorage.setItem('isAuthenticated', 'true')
-        localStorage.setItem('loginEmail', formData.email)
-        
-        // Check if profile is completed
-        const profileCompleted = localStorage.getItem('profileCompleted')
-        
-        if (profileCompleted === 'true') {
+        localStorage.setItem('loginEmail', data.email || data.student_code)
+        localStorage.setItem('prefilledProfile', JSON.stringify(prefilledProfile))
+
+        if (data.profile_completed === true) {
+          localStorage.setItem('studentProfile', JSON.stringify(prefilledProfile))
+          localStorage.setItem('profileCompleted', 'true')
           navigate('/dashboard')
-        } else {
-          navigate('/profile-setup')
+          return
         }
-      } else {
-        // Authentication failed
-        setError('Invalid credentials. Please try again.')
+
+        localStorage.removeItem('profileCompleted')
+        navigate('/profile-setup')
+      } catch (err) {
+        console.error('Student login verification failed:', err)
+        setError('Unable to verify student credentials right now. Please try again.')
         setIsLoading(false)
       }
     }, 800)
@@ -137,7 +187,7 @@ const Login = () => {
             animate={{ opacity: 1 }}
             transition={{ duration: 0.8, delay: 0.5 }}
           >
-            SKF STUDENT LOGIN
+            {isAdminLoginMode ? 'ADMIN LOGIN' : 'SKF STUDENT LOGIN'}
           </motion.h1>
           
           <motion.p
@@ -146,7 +196,9 @@ const Login = () => {
             animate={{ opacity: 1 }}
             transition={{ duration: 0.8, delay: 0.7 }}
           >
-            Welcome back! Access exclusive content and manage your profile
+            {isAdminLoginMode
+              ? 'Sign in with admin credentials created by super admin'
+              : 'Enter student code and phone number to continue'}
           </motion.p>
         </div>
 
@@ -167,21 +219,23 @@ const Login = () => {
             </motion.div>
           )}
 
-          <div className="demo-credentials">
-            <p className="demo-label">Demo Credentials:</p>
-            <p className="demo-info">Email: <span>student@skf.in</span></p>
-            <p className="demo-info">Password: <span>Student@12345</span></p>
-          </div>
+          {isAdminLoginMode ? null : (
+            <div className="demo-credentials">
+              <p className="demo-label">Student Login Format:</p>
+              <p className="demo-info">Student Code: <span>BTECH\2022\CSE\0001</span></p>
+              <p className="demo-info">Password: <span>Phone Number</span></p>
+            </div>
+          )}
 
           <div className="form-group">
-            <label htmlFor="email">SKF Email Address</label>
+            <label htmlFor="email">{isAdminLoginMode ? 'Admin Email' : 'Student Code'}</label>
             <input
-              type="email"
+              type={isAdminLoginMode ? 'email' : 'text'}
               id="email"
               name="email"
               value={formData.email}
               onChange={handleChange}
-              placeholder="student@skf.in"
+              placeholder={isAdminLoginMode ? 'admin@skf.in' : 'BTECH\\2022\\CSE\\0001'}
               required
               className="form-input"
               disabled={isLoading}
@@ -189,14 +243,14 @@ const Login = () => {
           </div>
 
           <div className="form-group">
-            <label htmlFor="password">Password</label>
+            <label htmlFor="password">{isAdminLoginMode ? 'Password' : 'Phone Number'}</label>
             <input
               type="password"
               id="password"
               name="password"
               value={formData.password}
               onChange={handleChange}
-              placeholder="Enter your password"
+              placeholder={isAdminLoginMode ? 'Enter your password' : 'Enter phone number'}
               required
               className="form-input"
               disabled={isLoading}
@@ -222,12 +276,26 @@ const Login = () => {
           animate={{ opacity: 1 }}
           transition={{ duration: 0.8, delay: 1.1 }}
         >
-          <p className="auth-divider">
-            <span>Not an SKF student?</span>
-          </p>
-          <Link to="/register" className="switch-link">
-            Register for events as a participant →
-          </Link>
+          {isAdminLoginMode ? (
+            <Link to="/login" className="switch-link">
+              ← Back to Login Choice
+            </Link>
+          ) : (
+            <Link to="/login" className="switch-link">
+              ← Back to Login Choice
+            </Link>
+          )}
+
+          {isAdminLoginMode ? null : (
+            <>
+              <p className="auth-divider">
+                <span>Not an SKF student?</span>
+              </p>
+              <Link to="/register" className="switch-link">
+                Register for events as a participant →
+              </Link>
+            </>
+          )}
         </motion.div>
       </motion.div>
     </div>

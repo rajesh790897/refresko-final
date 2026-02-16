@@ -13,7 +13,7 @@ const Admin = () => {
   useEffect(() => {
     const isAdminAuthenticated = localStorage.getItem('adminAuthenticated')
     if (isAdminAuthenticated !== 'true') {
-      navigate('/login?role=admin')
+      navigate('/login/admin')
     }
   }, [navigate])
 

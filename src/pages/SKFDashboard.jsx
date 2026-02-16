@@ -1,12 +1,14 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
+import QRCode from 'qrcode'
+import { getActivePaymentOption, loadPaymentConfig } from '../lib/paymentConfig'
 import './SKFDashboard.css'
 
 // Default data structure
 const defaultStudentData = {
   name: 'John Doe',
-  studentId: 'SKF2024001',
+  studentId: 'BTECH\\2022\\CSE\\0001',
   email: 'john.doe@skf.edu',
   department: 'Computer Science',
   year: '3rd Year',
@@ -16,30 +18,64 @@ const defaultStudentData = {
   contributionStatus: 'Volunteer'
 }
 
-const mockPaymentData = {
-  transactionId: 'TXN2024RF001234',
-  amount: '₹500',
-  paymentDate: '2026-02-10',
-  paymentMethod: 'UPI',
-  status: 'Paid',
-  description: 'Refresko 2026 - SKF Student Registration',
-  breakdown: [
-    { item: 'Base Registration', amount: '₹300' },
-    { item: 'Event Access Pass', amount: '₹150' },
-    { item: 'Merchandise Voucher', amount: '₹50' }
-  ]
-}
-
 const SKFDashboard = () => {
   const navigate = useNavigate()
   const [activeSection, setActiveSection] = useState('home')
   const [student, setStudent] = useState(defaultStudentData)
-  const [payment] = useState(mockPaymentData)
+  const [latestPayment, setLatestPayment] = useState(null)
   const [showFoodModal, setShowFoodModal] = useState(false)
   const [foodPreference, setFoodPreference] = useState('')
+  const [gatePassQrCodeUrl, setGatePassQrCodeUrl] = useState('')
+  const [paymentConfig, setPaymentConfig] = useState(() => loadPaymentConfig())
+
+  const activePaymentOption = useMemo(
+    () => getActivePaymentOption(paymentConfig),
+    [paymentConfig]
+  )
+  const configuredPaymentAmount = Number(activePaymentOption?.amount) || 600
+  const isFoodIncluded = Boolean(activePaymentOption?.includeFood)
+
+  const findLatestStudentPayment = (profileData) => {
+    const studentId = profileData?.studentId || ''
+    const studentEmail = profileData?.email || localStorage.getItem('loginEmail') || ''
+
+    try {
+      const savedPayments = localStorage.getItem('paymentSubmissions')
+      const allPayments = savedPayments ? JSON.parse(savedPayments) : []
+
+      const studentPayments = Array.isArray(allPayments)
+        ? allPayments.filter((payment) => {
+            const paymentStudentCode = payment.studentCode || payment.studentId || ''
+            const paymentEmail = payment.email || ''
+            return paymentStudentCode === studentId || (studentEmail && paymentEmail === studentEmail)
+          })
+        : []
+
+      if (!studentPayments.length) {
+        setLatestPayment(null)
+        return
+      }
+
+      const latest = [...studentPayments].sort((a, b) => {
+        const timeA = new Date(a.date || 0).getTime()
+        const timeB = new Date(b.date || 0).getTime()
+        return timeB - timeA
+      })[0]
+
+      const normalizedAmount = Number(latest?.amount)
+      const nextAmount = normalizedAmount > 0 && normalizedAmount !== 500 ? normalizedAmount : configuredPaymentAmount
+      setLatestPayment({
+        ...latest,
+        amount: nextAmount
+      })
+    } catch {
+      setLatestPayment(null)
+    }
+  }
 
   useEffect(() => {
     document.body.classList.add('system-cursor')
+    setPaymentConfig(loadPaymentConfig())
     
     // Check authentication
     const isAuthenticated = localStorage.getItem('isAuthenticated')
@@ -69,15 +105,104 @@ const SKFDashboard = () => {
           year: profileData.year || defaultStudentData.year,
           phone: profileData.phone || defaultStudentData.phone
         })
+        findLatestStudentPayment(profileData)
       } catch (error) {
         console.error('Error loading profile:', error)
       }
     }
+
+    const syncPaymentStatus = () => {
+      const updatedProfile = localStorage.getItem('studentProfile')
+      if (updatedProfile) {
+        try {
+          findLatestStudentPayment(JSON.parse(updatedProfile))
+        } catch {
+          findLatestStudentPayment(null)
+        }
+      }
+    }
+
+    const handleStorageUpdate = (event) => {
+      if (event.key === 'paymentSubmissions') {
+        syncPaymentStatus()
+      }
+
+      if (event.key === 'paymentGatewayConfig') {
+        setPaymentConfig(loadPaymentConfig())
+      }
+    }
+
+    const handlePaymentConfigUpdate = () => {
+      setPaymentConfig(loadPaymentConfig())
+    }
+
+    window.addEventListener('storage', handleStorageUpdate)
+    window.addEventListener('paymentSubmissionsUpdated', syncPaymentStatus)
+    window.addEventListener('paymentConfigUpdated', handlePaymentConfigUpdate)
     
     return () => {
       document.body.classList.remove('system-cursor')
+      window.removeEventListener('storage', handleStorageUpdate)
+      window.removeEventListener('paymentSubmissionsUpdated', syncPaymentStatus)
+      window.removeEventListener('paymentConfigUpdated', handlePaymentConfigUpdate)
     }
   }, [navigate])
+
+  const isPaymentApproved = latestPayment?.status === 'completed' || latestPayment?.status === 'approved'
+  const isPaymentDeclined = latestPayment?.status === 'declined'
+  const payment = latestPayment
+    ? {
+        transactionId: latestPayment.transactionId || latestPayment.utrNo || 'N/A',
+        amount: `₹${Number(latestPayment.amount || configuredPaymentAmount)}`,
+        paymentDate: latestPayment.date || new Date().toISOString(),
+        paymentMethod: latestPayment.paymentMethod || 'UPI',
+        status: isPaymentApproved ? 'Approved' : latestPayment.status === 'declined' ? 'Declined' : 'Under Review',
+        description: 'Refresko 2026 - SKF Student Registration'
+      }
+    : null
+
+  const gatePassPayload = useMemo(() => JSON.stringify({
+    Student_Code: student.studentId || '',
+    Name: student.name || '',
+    Phone: student.phone || '',
+    Email: student.email || '',
+    Department: student.department || '',
+    Year: student.year || ''
+  }), [student])
+
+  useEffect(() => {
+    let isActive = true
+
+    const generateGatePassQrCode = async () => {
+      if (!isPaymentApproved) {
+        setGatePassQrCodeUrl('')
+        return
+      }
+
+      try {
+        const dataUrl = await QRCode.toDataURL(gatePassPayload, {
+          width: 240,
+          margin: 1,
+          errorCorrectionLevel: 'H'
+        })
+
+        if (isActive) {
+          setGatePassQrCodeUrl(dataUrl)
+        }
+      } catch (error) {
+        console.error('Failed to generate gate pass QR code:', error)
+        if (isActive) {
+          setGatePassQrCodeUrl('')
+        }
+      }
+    }
+
+    generateGatePassQrCode()
+
+    return () => {
+      isActive = false
+    }
+  }, [gatePassPayload, isPaymentApproved])
 
   const handleLogout = () => {
     // Clear authentication data
@@ -91,13 +216,20 @@ const SKFDashboard = () => {
   }
 
   const handleMakePayment = () => {
-    setShowFoodModal(true)
+    if (isFoodIncluded) {
+      setShowFoodModal(true)
+      return
+    }
+
+    localStorage.setItem('foodPreference', 'null')
+    navigate('/payment-gateway')
   }
 
   const handleProceedToPayment = () => {
     if (foodPreference) {
       // Save food preference to localStorage
       localStorage.setItem('foodPreference', foodPreference)
+      setShowFoodModal(false)
       // Navigate to payment gateway
       navigate('/payment-gateway')
     }
@@ -107,12 +239,7 @@ const SKFDashboard = () => {
     setFoodPreference(preference)
   }
 
-  // Generate QR code data URL (in production, use a proper QR library)
-  const generateQRCode = () => {
-    // This creates a simple placeholder. In production, use qrcode.react or similar
-    const qrData = `SKF-PASS-${student.studentId}-REFRESKO2026`
-    return qrData
-  }
+  const generatePassCode = () => `SKF-PASS-${student.studentId}-REFRESKO2026`
 
   const containerVariants = {
     hidden: { opacity: 0, x: 20 },
@@ -250,15 +377,18 @@ const SKFDashboard = () => {
                   >
                     <div className="action-icon">💳</div>
                     <h3>Contribute to Fest</h3>
-                    <p>Complete your registration by making the fest payment. Select your food preference and proceed to payment.</p>
+                    <p>
+                      Complete your registration by making the fest payment.
+                      {isFoodIncluded ? ' Select your food preference and proceed to payment.' : ' Food is not included for this amount and payment opens directly.'}
+                    </p>
                     <div className="payment-highlight">
                       <div className="payment-amount">
                         <span className="amount-label">Registration Fee</span>
-                        <span className="amount-value">₹500</span>
+                        <span className="amount-value">₹{configuredPaymentAmount}</span>
                       </div>
                       <div className="payment-includes">
                         <span>✓ All Event Access</span>
-                        <span>✓ Food & Refreshments</span>
+                        <span>{isFoodIncluded ? '✓ Food & Refreshments' : '✕ Food Not Included'}</span>
                         <span>✓ Merchandise Voucher</span>
                       </div>
                     </div>
@@ -294,21 +424,6 @@ const SKFDashboard = () => {
                   </motion.div>
                 </div>
 
-                {/* Quick Stats */}
-                <div className="quick-stats">
-                  <div className="stat-item">
-                    <span className="stat-value">{student.registeredEvents.length}</span>
-                    <span className="stat-label">Events Registered</span>
-                  </div>
-                  <div className="stat-item">
-                    <span className="stat-value">{student.contributionStatus}</span>
-                    <span className="stat-label">Contribution Status</span>
-                  </div>
-                  <div className="stat-item">
-                    <span className="stat-value">✓</span>
-                    <span className="stat-label">Payment Complete</span>
-                  </div>
-                </div>
               </motion.div>
             )}
 
@@ -327,50 +442,35 @@ const SKFDashboard = () => {
                   <p className="section-subtitle">Your digital entry pass for Refresko 2026</p>
                 </div>
 
+                {isPaymentApproved ? (
                 <div className="gatepass-card">
                   <div className="gatepass-header">
                     <div className="gatepass-logo">
-                      <span className="logo-text">REFRESKO</span>
-                      <span className="logo-year">2026</span>
+                      <div className="logo-icons-row">
+                        <img src="/college.png" alt="College Logo" className="brand-logo-img" />
+                        <span className="logo-separator">|</span>
+                        <img src="/refresko.png" alt="Refresko Logo" className="brand-logo-img" />
+                      </div>
+                      <div className="logo-title-row">
+                        <span className="logo-text">REFRESKO</span>
+                        <span className="logo-year">2026</span>
+                      </div>
                     </div>
                     <span className="pass-type">SKF STUDENT PASS</span>
                   </div>
 
                   <div className="qr-container">
                     <div className="qr-code">
-                      {/* QR Code Placeholder - In production use qrcode.react */}
                       <div className="qr-placeholder">
-                        <svg viewBox="0 0 100 100" className="qr-svg">
-                          {/* Simulated QR pattern */}
-                          <rect x="10" y="10" width="20" height="20" fill="currentColor"/>
-                          <rect x="70" y="10" width="20" height="20" fill="currentColor"/>
-                          <rect x="10" y="70" width="20" height="20" fill="currentColor"/>
-                          <rect x="35" y="10" width="5" height="5" fill="currentColor"/>
-                          <rect x="45" y="10" width="5" height="5" fill="currentColor"/>
-                          <rect x="55" y="10" width="5" height="5" fill="currentColor"/>
-                          <rect x="35" y="20" width="5" height="5" fill="currentColor"/>
-                          <rect x="50" y="20" width="5" height="5" fill="currentColor"/>
-                          <rect x="35" y="35" width="5" height="5" fill="currentColor"/>
-                          <rect x="45" y="35" width="5" height="5" fill="currentColor"/>
-                          <rect x="55" y="35" width="5" height="5" fill="currentColor"/>
-                          <rect x="65" y="35" width="5" height="5" fill="currentColor"/>
-                          <rect x="35" y="45" width="5" height="5" fill="currentColor"/>
-                          <rect x="50" y="45" width="5" height="5" fill="currentColor"/>
-                          <rect x="60" y="45" width="5" height="5" fill="currentColor"/>
-                          <rect x="35" y="55" width="5" height="5" fill="currentColor"/>
-                          <rect x="45" y="55" width="5" height="5" fill="currentColor"/>
-                          <rect x="55" y="55" width="5" height="5" fill="currentColor"/>
-                          <rect x="70" y="55" width="5" height="5" fill="currentColor"/>
-                          <rect x="80" y="45" width="5" height="5" fill="currentColor"/>
-                          <rect x="75" y="65" width="5" height="5" fill="currentColor"/>
-                          <rect x="85" y="70" width="5" height="5" fill="currentColor"/>
-                          <rect x="40" y="70" width="5" height="5" fill="currentColor"/>
-                          <rect x="50" y="75" width="5" height="5" fill="currentColor"/>
-                          <rect x="60" y="70" width="5" height="5" fill="currentColor"/>
-                          <rect x="45" y="85" width="5" height="5" fill="currentColor"/>
-                          <rect x="55" y="85" width="5" height="5" fill="currentColor"/>
-                          <rect x="65" y="85" width="5" height="5" fill="currentColor"/>
-                        </svg>
+                        {gatePassQrCodeUrl ? (
+                          <img
+                            src={gatePassQrCodeUrl}
+                            alt="Gate pass QR code"
+                            className="qr-image"
+                          />
+                        ) : (
+                          <span className="qr-loading-text">Generating QR...</span>
+                        )}
                       </div>
                       <div className="qr-glow"></div>
                     </div>
@@ -388,7 +488,7 @@ const SKFDashboard = () => {
                     </div>
                     <div className="pass-detail-row">
                       <span className="pass-label">Pass Code</span>
-                      <span className="pass-value code">{generateQRCode()}</span>
+                      <span className="pass-value code">{generatePassCode()}</span>
                     </div>
                     <div className="pass-detail-row">
                       <span className="pass-label">Valid For</span>
@@ -398,11 +498,21 @@ const SKFDashboard = () => {
 
                   <div className="pass-footer">
                     <span className="pass-status valid">✓ VALID PASS</span>
-                    <button className="download-btn">
-                      <span>📥 Download Pass</span>
-                    </button>
                   </div>
                 </div>
+                ) : (
+                <div className="student-card">
+                  <div className="card-header">
+                    <h2>Gate Pass Not Available Yet</h2>
+                    <span className="status-badge">Pending</span>
+                  </div>
+                  <p className="section-subtitle" style={{ marginBottom: '0' }}>
+                    {isPaymentDeclined
+                      ? 'Your payment was declined by admin. Please submit payment proof again.'
+                      : 'Your payment is under admin review. Gate pass will appear here after approval.'}
+                  </p>
+                </div>
+                )}
 
                 <div className="pass-instructions">
                   <h3>Entry Instructions</h3>
@@ -431,14 +541,22 @@ const SKFDashboard = () => {
                   <p className="section-subtitle">Your payment confirmation and details</p>
                 </div>
 
+                {isPaymentApproved && payment ? (
                 <div className="receipt-card">
                   <div className="receipt-header">
                     <div className="receipt-logo">
-                      <span className="logo-text">REFRESKO</span>
-                      <span className="logo-year">2026</span>
+                      <div className="logo-icons-row">
+                        <img src="/college.png" alt="College Logo" className="brand-logo-img" />
+                        <span className="logo-separator">|</span>
+                        <img src="/refresko.png" alt="Refresko Logo" className="brand-logo-img" />
+                      </div>
+                      <div className="logo-title-row">
+                        <span className="logo-text">REFRESKO</span>
+                        <span className="logo-year">2026</span>
+                      </div>
                     </div>
                     <div className="receipt-badge">
-                      <span className={`payment-status ${payment.status.toLowerCase()}`}>
+                      <span className={`payment-status ${isPaymentApproved ? 'paid' : 'pending'}`}>
                         ✓ {payment.status}
                       </span>
                     </div>
@@ -478,15 +596,6 @@ const SKFDashboard = () => {
                     </div>
 
                     <div className="receipt-breakdown">
-                      <h3>Payment Breakdown</h3>
-                      <div className="breakdown-items">
-                        {payment.breakdown.map((item, index) => (
-                          <div key={index} className="breakdown-row">
-                            <span className="item-name">{item.item}</span>
-                            <span className="item-amount">{item.amount}</span>
-                          </div>
-                        ))}
-                      </div>
                       <div className="breakdown-total">
                         <span>Total Amount</span>
                         <span className="total-amount">{payment.amount}</span>
@@ -520,6 +629,19 @@ const SKFDashboard = () => {
                     <p>For any queries, contact: finance@refresko.com</p>
                   </div>
                 </div>
+                ) : (
+                <div className="student-card">
+                  <div className="card-header">
+                    <h2>Receipt Not Available Yet</h2>
+                    <span className="status-badge">Pending</span>
+                  </div>
+                  <p className="section-subtitle" style={{ marginBottom: '0' }}>
+                    {isPaymentDeclined
+                      ? 'Your payment was declined by admin. Please complete payment again to generate receipt.'
+                      : 'Your payment receipt will be generated here once admin approves your payment.'}
+                  </p>
+                </div>
+                )}
               </motion.div>
             )}
           </AnimatePresence>
