@@ -27,12 +27,8 @@ const faqs = [
     id: 5,
     question: 'Can I participate in multiple events?',
     answer: 'Yes! You can participate in multiple events as long as they don\'t have overlapping schedules. We encourage participants to explore and engage with various activities throughout the fest.'
-  },
-  {
-    id: 6,
-    question: 'Is accommodation available?',
-    answer: 'Yes, we provide accommodation for outstation participants on campus. You can book accommodation while registering. Accommodation includes mattress, blankets, and access to washrooms.'
   }
+  
 ]
 
 const FAQ = () => {

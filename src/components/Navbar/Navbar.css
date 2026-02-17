@@ -20,6 +20,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   max-width: 1600px;
   margin: 0 auto;
   position: relative;
@@ -31,6 +32,7 @@
   gap: 8px;
   font-family: var(--font-heading);
   font-size: 1.5rem;
+  min-width: 0;
 }
 
 .logo-icons-row {
@@ -61,12 +63,14 @@
   color: var(--color-secondary);
   font-weight: 700;
   letter-spacing: 0.1em;
+  white-space: nowrap;
 }
 
 .logo-year {
   color: var(--color-primary);
   font-weight: 300;
   text-shadow: 0 0 10px var(--color-primary);
+  white-space: nowrap;
 }
 
 .nav-links-glass-box {
@@ -151,6 +155,7 @@
   display: flex;
   align-items: center;
   gap: 20px;
+  flex-shrink: 0;
 }
 
 .cart-btn {
@@ -226,36 +231,115 @@
 
 /* Mobile Styles */
 @media (max-width: 1024px) {
+  .navbar {
+    padding: 12px 20px;
+  }
+
+  .navbar-container {
+    flex-wrap: wrap;
+    align-items: center;
+    row-gap: 10px;
+  }
+
+  .nav-links-glass-box {
+    position: static;
+    transform: none;
+    width: 100%;
+    order: 3;
+    padding: 10px 14px;
+    border-radius: 10px;
+  }
+
   .nav-links {
-    display: none;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+
+  .nav-link {
+    font-size: 0.9rem;
+    letter-spacing: 0.04em;
   }
 }
 
 @media (max-width: 768px) {
   .navbar {
-    padding: 15px 20px;
+    padding: 12px 14px;
   }
 
   .logo {
-    font-size: 1.2rem;
-  }
-
-  .logo-icons-row {
-    padding: 4px 6px;
+    font-size: 1rem;
     gap: 6px;
   }
 
+  .logo-icons-row {
+    padding: 3px 5px;
+    gap: 5px;
+  }
+
   .brand-logo-img {
-    width: 19px;
-    height: 19px;
+    width: 17px;
+    height: 17px;
+  }
+
+  .logo-main {
+    font-size: 0.82rem;
+    letter-spacing: 0.06em;
+  }
+
+  .logo-year {
+    font-size: 0.82rem;
   }
 
   .login-btn {
-    padding: 8px 20px;
-    font-size: 0.8rem;
+    padding: 8px 14px;
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
   }
 
   .login-dropdown {
     min-width: 160px;
+  }
+
+  .nav-links-glass-box {
+    padding: 8px 10px;
+  }
+
+  .nav-links {
+    gap: 16px;
+  }
+
+  .nav-link {
+    font-size: 0.82rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .logo-main,
+  .logo-year {
+    display: none;
+  }
+
+  .login-btn {
+    padding: 7px 12px;
+    font-size: 0.68rem;
+  }
+
+  .navbar {
+    padding: 10px 10px;
+  }
+
+  .nav-links-glass-box {
+    padding: 8px;
+  }
+
+  .nav-links {
+    gap: 12px;
+  }
+
+  .nav-link {
+    font-size: 0.76rem;
   }
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient'
+import { cpanelApi } from '../lib/cpanelApi'
 import './Login.css'
 
 const normalizePhone = (value) => value.replace(/\D/g, '')
@@ -59,6 +60,26 @@ const Login = () => {
 
     // Keep a small delay for UI consistency
     setTimeout(async () => {
+      if (isAdminLoginMode && cpanelApi.isConfigured()) {
+        try {
+          const response = await cpanelApi.adminLogin({ email: formData.email, password: formData.password })
+
+          if (response?.success && response?.admin) {
+            localStorage.removeItem('isAuthenticated')
+            localStorage.setItem('adminAuthenticated', 'true')
+            localStorage.setItem('adminLoginEmail', response.admin.email)
+            navigate('/admin')
+            return
+          }
+
+          setError('Invalid credentials. Please try again.')
+          setIsLoading(false)
+          return
+        } catch (apiError) {
+          console.warn('cPanel admin login failed, trying localStorage:', apiError)
+        }
+      }
+
       let adminAccounts = []
       try {
         const savedAdmins = localStorage.getItem('adminAccounts')

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import { isSupabaseConfigured, supabase } from '../../lib/supabaseClient'
+import { cpanelApi } from '../../lib/cpanelApi'
 import './PaymentManagement.css'
 
 const PAGE_SIZE = 20
@@ -49,13 +50,13 @@ const normalizePayments = (records) => {
 
   return records.map((payment, index) => {
     const foodIncluded = resolveFoodIncluded(payment)
-    const rawFoodPreference = payment.foodPreference ?? payment.paymentFoodPreference ?? (foodIncluded ? localStorage.getItem('paymentFoodPreference') : null)
+    const rawFoodPreference = payment.foodPreference ?? payment.food_preference ?? payment.paymentFoodPreference ?? (foodIncluded ? localStorage.getItem('paymentFoodPreference') : null)
 
     return {
-      id: payment.id || `PAY${index + 1}`,
-      utrNo: payment.utrNo || payment.paymentUTR || payment.transactionId || 'N/A',
-      studentCode: payment.studentCode || payment.studentId || 'N/A',
-      studentName: payment.studentName || payment.name || 'N/A',
+      id: payment.id || payment.payment_id || `PAY${index + 1}`,
+      utrNo: payment.utrNo || payment.utr_no || payment.paymentUTR || payment.transactionId || 'N/A',
+      studentCode: payment.studentCode || payment.student_code || payment.studentId || 'N/A',
+      studentName: payment.studentName || payment.student_name || payment.name || 'N/A',
       email: payment.email || 'N/A',
       college: payment.college || 'N/A',
       department: payment.department || 'N/A',
@@ -66,12 +67,12 @@ const normalizePayments = (records) => {
       amount: Number(payment.amount) || 600,
       status: payment.status || 'pending',
       paymentApproved: getPaymentApprovedStatus(payment),
-      date: payment.date || new Date().toISOString(),
-      transactionId: payment.transactionId || 'N/A',
-      paymentMethod: payment.paymentMethod || 'UPI',
+      date: payment.date || payment.created_at || new Date().toISOString(),
+      transactionId: payment.transactionId || payment.transaction_id || 'N/A',
+      paymentMethod: payment.paymentMethod || payment.payment_method || 'UPI',
       screenshot: payment.screenshot || payment.paymentScreenshot || null,
-      screenshotName: payment.screenshotName || payment.paymentScreenshotName || '',
-      reviewedAt: payment.reviewedAt || ''
+      screenshotName: payment.screenshotName || payment.screenshot_name || payment.paymentScreenshotName || '',
+      reviewedAt: payment.reviewedAt || payment.reviewed_at || ''
     }
   })
 }
@@ -183,6 +184,25 @@ const loadPaymentsFromLocalStorage = () => {
   }
 }
 
+const loadPaymentsWithApi = async () => {
+  if (cpanelApi.isConfigured()) {
+    try {
+      const response = await cpanelApi.listPayments({ limit: 200 })
+      const payments = Array.isArray(response?.payments) ? response.payments : []
+      const normalized = normalizePayments(payments)
+
+      if (normalized.length > 0) {
+        localStorage.setItem('paymentSubmissions', JSON.stringify(payments))
+        return normalized
+      }
+    } catch {
+      return loadPaymentsFromLocalStorage()
+    }
+  }
+
+  return loadPaymentsFromLocalStorage()
+}
+
 const PaymentManagement = () => {
   const [payments, setPayments] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
@@ -192,8 +212,9 @@ const PaymentManagement = () => {
   const [selectedScreenshot, setSelectedScreenshot] = useState(null)
 
   useEffect(() => {
-    const refreshPayments = () => {
-      setPayments(loadPaymentsFromLocalStorage())
+    const refreshPayments = async () => {
+      const loaded = await loadPaymentsWithApi()
+      setPayments(loaded)
     }
 
     refreshPayments()
@@ -251,6 +272,27 @@ const PaymentManagement = () => {
   }
 
   const handleUpdatePaymentStatus = async (paymentId, status) => {
+    if (cpanelApi.isConfigured()) {
+      try {
+        await cpanelApi.updatePaymentDecision({ paymentId, decision: status })
+
+        const refreshed = await loadPaymentsWithApi()
+        setPayments(refreshed)
+
+        setSelectedPayment((previous) => (
+          previous && previous.id === paymentId
+            ? {
+                ...previous,
+                status: status === 'approved' ? 'completed' : 'declined',
+                paymentApproved: status
+              }
+            : previous
+        ))
+        return
+      } catch (apiError) {
+        console.warn('API payment decision update failed, using localStorage:', apiError)
+      }
+    }
     try {
       const savedPayments = localStorage.getItem('paymentSubmissions')
       const parsedPayments = savedPayments ? JSON.parse(savedPayments) : []

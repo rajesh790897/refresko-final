@@ -24,7 +24,8 @@ const teamMembers = [
     name: 'PRITAM GHOSH',
     department: 'CSE 3rd Year',
     initial: 'PG',
-    color: '#FF3366'
+    color: '#FF3366',
+    image: '/PritamGhosh.jpeg'
   },
   {
     id: 4,

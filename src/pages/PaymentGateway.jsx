@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import QRCode from 'qrcode'
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient'
 import { getActivePaymentOption, getUpiPayload, loadPaymentConfig } from '../lib/paymentConfig'
+import { cpanelApi } from '../lib/cpanelApi'
 import './PaymentGateway.css'
 
 const PaymentGateway = () => {
@@ -15,6 +16,7 @@ const PaymentGateway = () => {
   const [utrNumber, setUtrNumber] = useState('')
   const [paymentScreenshot, setPaymentScreenshot] = useState(null)
   const [paymentScreenshotName, setPaymentScreenshotName] = useState('')
+  const [paymentScreenshotBase64, setPaymentScreenshotBase64] = useState(null)
   const [formError, setFormError] = useState('')
   const [paymentConfig, setPaymentConfig] = useState(() => loadPaymentConfig())
   const [paymentQrCodeUrl, setPaymentQrCodeUrl] = useState('')
@@ -114,6 +116,7 @@ const PaymentGateway = () => {
 
     if (!file) {
       setPaymentScreenshot(null)
+      setPaymentScreenshotBase64(null)
       setPaymentScreenshotName('')
       return
     }
@@ -121,20 +124,22 @@ const PaymentGateway = () => {
     if (!file.type.startsWith('image/')) {
       setFormError('Please upload a valid image file for payment screenshot')
       setPaymentScreenshot(null)
+      setPaymentScreenshotBase64(null)
       setPaymentScreenshotName('')
       return
     }
 
     const reader = new FileReader()
     reader.onload = () => {
-      setPaymentScreenshot(reader.result)
+      setPaymentScreenshotBase64(reader.result)
       setPaymentScreenshotName(file.name)
       setFormError('')
     }
     reader.readAsDataURL(file)
+    setPaymentScreenshot(file)
   }
 
-  const handleConfirmPayment = () => {
+  const handleConfirmPayment = async () => {
     const normalizedUtr = utrNumber.trim().toUpperCase()
     const currentStudentId = studentProfile?.studentId || ''
     const savedFoodPreference = localStorage.getItem('foodPreference')
@@ -185,10 +190,38 @@ const PaymentGateway = () => {
     localStorage.setItem('usedUtrRegistry', JSON.stringify(usedUtrRegistry))
     setFormError('')
     setPaymentStatus('processing')
+
+    const txnId = `TXN${Date.now()}`
+    const paymentId = `PAY${Date.now()}`
+
+    if (cpanelApi.isConfigured()) {
+      try {
+        const formData = new FormData()
+        formData.append('payment_id', paymentId)
+        formData.append('transaction_id', txnId)
+        formData.append('utr_no', normalizedUtr)
+        formData.append('student_code', currentStudentId)
+        formData.append('student_name', studentProfile.name || 'N/A')
+        formData.append('email', studentProfile.email || '')
+        formData.append('department', studentProfile.department || '')
+        formData.append('year', studentProfile.year || '')
+        formData.append('amount', String(payableAmount))
+        formData.append('payment_method', 'UPI')
+        formData.append('food_included', isFoodIncluded ? '1' : '0')
+        formData.append('food_preference', effectiveFoodPreference || '')
+
+        if (paymentScreenshot && paymentScreenshot instanceof File) {
+          formData.append('screenshot', paymentScreenshot, paymentScreenshotName || 'payment-screenshot.jpg')
+        }
+
+        await cpanelApi.submitPayment(formData)
+      } catch (apiError) {
+        console.warn('cPanel API payment submission failed, using localStorage fallback:', apiError)
+      }
+    }
     
     // Simulate payment processing
     setTimeout(async () => {
-      const txnId = `TXN${Date.now()}`
       setTransactionId(txnId)
       setPaymentStatus('success')
       
@@ -218,7 +251,7 @@ const PaymentGateway = () => {
       }
 
       const submittedPayment = {
-        id: `PAY${Date.now()}`,
+        id: paymentId,
         utrNo: normalizedUtr,
         studentCode: studentProfile.studentId || 'N/A',
         studentName: studentProfile.name || 'N/A',
@@ -268,7 +301,7 @@ const PaymentGateway = () => {
 
       if (paymentScreenshot) {
         try {
-          localStorage.setItem(`paymentScreenshot:${normalizedUtr}`, paymentScreenshot)
+          localStorage.setItem(`paymentScreenshot:${normalizedUtr}`, paymentScreenshotBase64 || '')
         } catch {
           console.warn('Payment screenshot skipped due to localStorage size limit')
         }

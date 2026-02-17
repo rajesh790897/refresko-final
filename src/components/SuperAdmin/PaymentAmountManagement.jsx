@@ -4,9 +4,9 @@ import QRCode from 'qrcode'
 import {
   getActivePaymentOption,
   getUpiPayload,
-  loadPaymentConfig,
-  savePaymentConfig
+  loadPaymentConfig
 } from '../../lib/paymentConfig'
+import { savePaymentConfigWithApi } from '../../lib/paymentConfigApi'
 import './PaymentAmountManagement.css'
 
 const PaymentAmountManagement = () => {
@@ -109,15 +109,21 @@ const PaymentAmountManagement = () => {
     }))
   }
 
-  const handleSaveSettings = () => {
-    const saved = savePaymentConfig({
+  const handleSaveSettings = async () => {
+    const nextConfig = {
       activeOptionId,
       options: draftOptions
-    })
+    }
 
-    setConfig(saved)
-    setSaveMessage('Payment settings saved. Student dashboard now uses this amount and QR.')
-    window.setTimeout(() => setSaveMessage(''), 3000)
+    try {
+      const saved = await savePaymentConfigWithApi(nextConfig)
+      setConfig(saved)
+      setSaveMessage('Payment settings saved. Student dashboard now uses this amount and QR.')
+      window.setTimeout(() => setSaveMessage(''), 3000)
+    } catch (error) {
+      setSaveMessage(`Save failed: ${error.message}`)
+      window.setTimeout(() => setSaveMessage(''), 5000)
+    }
   }
 
   return (
