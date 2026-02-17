@@ -10,6 +10,7 @@ return [
         'charset' => 'utf8mb4',
     ],
 
+
     'cors_allowed_origins' => [
         'https://refresko.skf.edu.in',
         'https://api-refresko.skf.edu.in',

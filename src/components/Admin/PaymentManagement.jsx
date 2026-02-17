@@ -63,7 +63,8 @@ const normalizePayments = (records) => {
     }
 
     return {
-      id: payment.id || payment.payment_id || `PAY${index + 1}`,
+      id: payment.payment_id || payment.id || `PAY${Date.now()}_${index + 1}`,
+      paymentId: payment.payment_id || payment.id || `PAY${Date.now()}_${index + 1}`,
       utrNo: payment.utrNo || payment.utr_no || payment.paymentUTR || payment.transactionId || 'N/A',
       studentCode: payment.studentCode || payment.student_code || payment.studentId || 'N/A',
       studentName: payment.studentName || payment.student_name || payment.name || 'N/A',
@@ -288,13 +289,25 @@ const PaymentManagement = () => {
         const targetPayment = payments.find(p => p.id === paymentId)
         const studentCode = (targetPayment?.studentCode || '').trim().toUpperCase()
 
+        console.log('Updating payment:', {
+          paymentId,
+          status,
+          studentCode,
+          targetPayment: targetPayment ? {
+            id: targetPayment.id,
+            paymentId: targetPayment.paymentId,
+            studentCode: targetPayment.studentCode
+          } : null
+        })
+
         // Update via cPanel API
-        await cpanelApi.updatePaymentDecision({ paymentId, decision: status })
+        const apiResponse = await cpanelApi.updatePaymentDecision({ paymentId, decision: status })
+        console.log('API Response:', apiResponse)
 
         // Sync to Supabase if configured
         if (isSupabaseConfigured && supabase && studentCode) {
           try {
-            await supabase
+            const supabaseResult = await supabase
               .from('students')
               .update({
                 payment_completion: status === 'declined' ? false : true,
@@ -302,7 +315,7 @@ const PaymentManagement = () => {
                 payment_approved: status === 'approved' ? 'approved' : 'declined'
               })
               .eq('student_code', studentCode)
-            console.log('Supabase synced successfully for:', studentCode)
+            console.log('Supabase synced successfully for:', studentCode, supabaseResult)
           } catch (supabaseError) {
             console.error('Unable to sync admin payment decision to Supabase:', supabaseError)
           }
