@@ -76,6 +76,46 @@ function admin_create(): void
             ";
             $pdo->exec($createTableSql);
             error_log('admin_users table created automatically');
+        } else {
+            // Table exists - check and add missing columns if needed
+            try {
+                // Check if display_name column exists
+                $columns = $pdo->query("SHOW COLUMNS FROM admin_users LIKE 'display_name'")->fetch();
+                if (!$columns) {
+                    $pdo->exec("ALTER TABLE admin_users ADD COLUMN display_name VARCHAR(120) NULL AFTER id");
+                    error_log('Added display_name column to admin_users table');
+                }
+                
+                // Check if role column exists
+                $roleColumn = $pdo->query("SHOW COLUMNS FROM admin_users LIKE 'role'")->fetch();
+                if (!$roleColumn) {
+                    $pdo->exec("ALTER TABLE admin_users ADD COLUMN role ENUM('admin','superadmin') NOT NULL DEFAULT 'admin' AFTER password_hash");
+                    error_log('Added role column to admin_users table');
+                }
+                
+                // Check if is_active column exists
+                $activeColumn = $pdo->query("SHOW COLUMNS FROM admin_users LIKE 'is_active'")->fetch();
+                if (!$activeColumn) {
+                    $pdo->exec("ALTER TABLE admin_users ADD COLUMN is_active TINYINT(1) NOT NULL DEFAULT 1 AFTER role");
+                    error_log('Added is_active column to admin_users table');
+                }
+                
+                // Check if created_at column exists
+                $createdColumn = $pdo->query("SHOW COLUMNS FROM admin_users LIKE 'created_at'")->fetch();
+                if (!$createdColumn) {
+                    $pdo->exec("ALTER TABLE admin_users ADD COLUMN created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER is_active");
+                    error_log('Added created_at column to admin_users table');
+                }
+                
+                // Check if updated_at column exists
+                $updatedColumn = $pdo->query("SHOW COLUMNS FROM admin_users LIKE 'updated_at'")->fetch();
+                if (!$updatedColumn) {
+                    $pdo->exec("ALTER TABLE admin_users ADD COLUMN updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at");
+                    error_log('Added updated_at column to admin_users table');
+                }
+            } catch (PDOException $e) {
+                error_log('Schema migration warning: ' . $e->getMessage());
+            }
         }
         
         $stmt = $pdo->prepare('INSERT INTO admin_users (display_name, email, password_hash, role, is_active)
@@ -127,6 +167,46 @@ function admin_list(): void
             // Return empty list since table was just created
             json_response(['success' => true, 'admins' => []]);
             return;
+        } else {
+            // Table exists - check and add missing columns if needed
+            try {
+                // Check if display_name column exists
+                $columns = $pdo->query("SHOW COLUMNS FROM admin_users LIKE 'display_name'")->fetch();
+                if (!$columns) {
+                    $pdo->exec("ALTER TABLE admin_users ADD COLUMN display_name VARCHAR(120) NULL AFTER id");
+                    error_log('Added display_name column to admin_users table');
+                }
+                
+                // Check if role column exists
+                $roleColumn = $pdo->query("SHOW COLUMNS FROM admin_users LIKE 'role'")->fetch();
+                if (!$roleColumn) {
+                    $pdo->exec("ALTER TABLE admin_users ADD COLUMN role ENUM('admin','superadmin') NOT NULL DEFAULT 'admin' AFTER password_hash");
+                    error_log('Added role column to admin_users table');
+                }
+                
+                // Check if is_active column exists
+                $activeColumn = $pdo->query("SHOW COLUMNS FROM admin_users LIKE 'is_active'")->fetch();
+                if (!$activeColumn) {
+                    $pdo->exec("ALTER TABLE admin_users ADD COLUMN is_active TINYINT(1) NOT NULL DEFAULT 1 AFTER role");
+                    error_log('Added is_active column to admin_users table');
+                }
+                
+                // Check if created_at column exists
+                $createdColumn = $pdo->query("SHOW COLUMNS FROM admin_users LIKE 'created_at'")->fetch();
+                if (!$createdColumn) {
+                    $pdo->exec("ALTER TABLE admin_users ADD COLUMN created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER is_active");
+                    error_log('Added created_at column to admin_users table');
+                }
+                
+                // Check if updated_at column exists
+                $updatedColumn = $pdo->query("SHOW COLUMNS FROM admin_users LIKE 'updated_at'")->fetch();
+                if (!$updatedColumn) {
+                    $pdo->exec("ALTER TABLE admin_users ADD COLUMN updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at");
+                    error_log('Added updated_at column to admin_users table');
+                }
+            } catch (PDOException $e) {
+                error_log('Schema migration warning: ' . $e->getMessage());
+            }
         }
         
         $stmt = $pdo->query('SELECT id, display_name, email, role, is_active, created_at
