@@ -52,6 +52,16 @@ const normalizePayments = (records) => {
     const foodIncluded = resolveFoodIncluded(payment)
     const rawFoodPreference = payment.foodPreference ?? payment.food_preference ?? payment.paymentFoodPreference ?? (foodIncluded ? localStorage.getItem('paymentFoodPreference') : null)
 
+    // Build full screenshot URL from API response
+    let screenshotUrl = payment.screenshot || payment.paymentScreenshot || null
+    
+    // If backend returned screenshot_path, it's already converted to full URL
+    // Otherwise check localStorage for base64 data
+    if (!screenshotUrl && payment.screenshot_path) {
+      const apiBase = cpanelApi.baseUrl || 'https://api-refresko.skf.edu.in'
+      screenshotUrl = apiBase + payment.screenshot_path
+    }
+
     return {
       id: payment.id || payment.payment_id || `PAY${index + 1}`,
       utrNo: payment.utrNo || payment.utr_no || payment.paymentUTR || payment.transactionId || 'N/A',
@@ -70,7 +80,7 @@ const normalizePayments = (records) => {
       date: payment.date || payment.created_at || new Date().toISOString(),
       transactionId: payment.transactionId || payment.transaction_id || 'N/A',
       paymentMethod: payment.paymentMethod || payment.payment_method || 'UPI',
-      screenshot: payment.screenshot || payment.paymentScreenshot || null,
+      screenshot: screenshotUrl,
       screenshotName: payment.screenshotName || payment.screenshot_name || payment.paymentScreenshotName || '',
       reviewedAt: payment.reviewedAt || payment.reviewed_at || ''
     }
@@ -274,11 +284,35 @@ const PaymentManagement = () => {
   const handleUpdatePaymentStatus = async (paymentId, status) => {
     if (cpanelApi.isConfigured()) {
       try {
+        // Find payment to get student_code before API call
+        const targetPayment = payments.find(p => p.id === paymentId)
+        const studentCode = (targetPayment?.studentCode || '').trim().toUpperCase()
+
+        // Update via cPanel API
         await cpanelApi.updatePaymentDecision({ paymentId, decision: status })
 
+        // Sync to Supabase if configured
+        if (isSupabaseConfigured && supabase && studentCode) {
+          try {
+            await supabase
+              .from('students')
+              .update({
+                payment_completion: status === 'declined' ? false : true,
+                gate_pass_created: status === 'approved' ? true : false,
+                payment_approved: status === 'approved' ? 'approved' : 'declined'
+              })
+              .eq('student_code', studentCode)
+            console.log('Supabase synced successfully for:', studentCode)
+          } catch (supabaseError) {
+            console.error('Unable to sync admin payment decision to Supabase:', supabaseError)
+          }
+        }
+
+        // Refresh payment list from API
         const refreshed = await loadPaymentsWithApi()
         setPayments(refreshed)
 
+        // Update modal state
         setSelectedPayment((previous) => (
           previous && previous.id === paymentId
             ? {

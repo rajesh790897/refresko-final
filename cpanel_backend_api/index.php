@@ -1,0 +1,93 @@
+<?php
+
+require_once __DIR__ . '/lib/response.php';
+require_once __DIR__ . '/lib/cors.php';
+require_once __DIR__ . '/lib/helpers.php';
+require_once __DIR__ . '/lib/upload.php';
+require_once __DIR__ . '/config/database.php';
+
+require_once __DIR__ . '/routes/health.php';
+require_once __DIR__ . '/routes/config.php';
+require_once __DIR__ . '/routes/students.php';
+require_once __DIR__ . '/routes/payments.php';
+require_once __DIR__ . '/routes/admin.php';
+
+apply_cors();
+
+$path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
+$scriptDir = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '')), '/');
+if ($scriptDir !== '' && strpos($path, $scriptDir) === 0) {
+    $path = substr($path, strlen($scriptDir));
+}
+$path = '/' . ltrim($path, '/');
+$method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
+
+try {
+    if ($method === 'GET' && $path === '/') {
+        json_response([
+            'success' => true,
+            'message' => 'Refresko API is running',
+            'health' => '/health',
+        ]);
+    }
+
+    if ($method === 'GET' && $path === '/health') {
+        health_route();
+    }
+
+    if ($method === 'GET' && $path === '/config/active') {
+        config_get_active();
+    }
+
+    if ($method === 'POST' && $path === '/config/active') {
+        config_set_active();
+    }
+
+    if ($method === 'GET' && $path === '/students/get') {
+        students_get_one();
+    }
+
+    if ($method === 'POST' && $path === '/students/upsert') {
+        students_upsert_profile();
+    }
+
+    if ($method === 'GET' && $path === '/payments/list') {
+        payments_list();
+    }
+
+    if ($method === 'POST' && $path === '/payments/submit') {
+        payments_submit_with_upload();
+    }
+
+    if ($method === 'POST' && $path === '/payments/decision') {
+        payments_update_status();
+    }
+
+    if ($method === 'POST' && $path === '/admin/login') {
+        admin_login();
+    }
+
+    if ($method === 'POST' && $path === '/admin/create') {
+        admin_create();
+    }
+
+    if ($method === 'GET' && $path === '/admin/list') {
+        admin_list();
+    }
+
+    if ($method === 'POST' && $path === '/admin/update') {
+        admin_update();
+    }
+
+    if ($method === 'POST' && $path === '/admin/delete') {
+        admin_delete();
+    }
+
+    json_response(['success' => false, 'message' => 'Route not found', 'route' => $path], 404);
+} catch (Throwable $error) {
+    json_response([
+        'success' => false,
+        'message' => 'Internal server error',
+        'error' => $error->getMessage(),
+    ], 500);
+}
