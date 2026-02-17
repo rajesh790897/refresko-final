@@ -4,8 +4,8 @@ return [
     'db' => [
         'host' => 'localhost',
         'port' => 3306,
-        'name' => 'skfedbzl_refresko',
-        'user' => 'skfedbzl_refapi',
+        'name' => 'skfedbzl_refresko_prod',
+        'user' => 'skfedbzl_refresko_api',
         'pass' => 'refresko26',
         'charset' => 'utf8mb4',
     ],
