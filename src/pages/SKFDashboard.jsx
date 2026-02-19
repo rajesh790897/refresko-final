@@ -751,14 +751,14 @@ const SKFDashboard = () => {
                         <span>PAID</span>
                       </div>
                     </div>
-                    <div className="receipt-actions">
+                    {/* <div className="receipt-actions">
                       <button className="receipt-btn">
                         <span>📥 Download Receipt</span>
                       </button>
                       <button className="receipt-btn secondary">
                         <span>📧 Email Receipt</span>
                       </button>
-                    </div>
+                    </div> */}
                   </div>
 
                   <div className="receipt-note">
