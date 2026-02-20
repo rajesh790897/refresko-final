@@ -5,30 +5,59 @@ import './Performers.css'
 const performers = [
   {
     id: 1,
-    name: 'ARIJIT SINGH',
+    name: 'Fossils',
     role: 'Playback Singer',
-    year: '2011',
-    image: '/arijitsingh2011.jpg'
+    // year: '2012',
+    image: 'https://fossilsmusic.in/images/og.jpg'
   },
   {
     id: 2,
-    name: 'ASH KING',
+    name: 'Underground Authority',
     role: 'Playback Singer',
-    year: '2023',
-    image: '/ashking2023.jpg'
+    // year: '2013',
+    image: 'https://i.scdn.co/image/ab6761610000517480ae877d506397d931a1e93d'
   },
   {
     id: 3,
-    name: 'SNIGDHAJIT BHOWMIK',
+    name: 'Nakaz Asis',
     role: 'Performer',
-    year: '2024',
-    image: '/snigdhajitbhowmik2024.jpg'
+    // year: '2024',
+    image: 'https://www.musiculture.in/wp-content/uploads/2025/12/PHOTO-2025-12-15-15-49-14-2-800x800.jpg'
+  },
+    {
+    id: 4,
+    name: 'Mohammad Irfan',
+    role: 'Performer',
+    // year: '2015',
+    image: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSFeJy61SdcChnqEux5J_QfEsJENMtczVtHvQ&s'
+  },
+    {
+    id: 5,
+    name: 'Raj barman',
+    role: 'Performer',
+    // year: '2024',
+    image: 'https://i.scdn.co/image/ab6761610000e5ebd84014344081d6fb5529a53c'
+  },
+      {
+    id: 6,
+    name: 'Raj barman',
+    role: 'Performer',
+    // year: '2024',
+    image: 'https://data1.ibtimes.co.in/en/full/628385/ash-king.jpg'
+  },
+  // https://admin.hire4event.com/assets/artistimage/1-65617b79890e0.webp
+        {
+    id: 6,
+    name: 'Snigdhajit Bhowmik',
+    role: 'Performer',
+    // year: '2024',
+    image: 'https://admin.hire4event.com/assets/artistimage/1-65617b79890e0.webp'
   },
   {
-    id: 4,
+    id: 7,
     name: 'NANDY SISTERS',
     role: 'Musical Duo',
-    year: '2025',
+    // year: '2025',
     image: '/nandysisters2025.jpg'
   }
 ]
