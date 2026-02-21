@@ -5,7 +5,9 @@ function payments_list(): void
     $status = trim((string)($_GET['status'] ?? ''));
     $search = trim((string)($_GET['search'] ?? ''));
     $limit = (int)($_GET['limit'] ?? 50);
-    $limit = max(1, min(200, $limit));
+    $offset = (int)($_GET['offset'] ?? 0);
+    $limit = max(1, min(3000, $limit));
+    $offset = max(0, $offset);
 
     $pdo = db();
 
@@ -22,14 +24,28 @@ function payments_list(): void
         $params[':search'] = '%' . $search . '%';
     }
 
+    $countSql = 'SELECT COUNT(*) AS total FROM payments p';
+    if ($where) {
+        $countSql .= ' WHERE ' . implode(' AND ', $where);
+    }
+
+    $countStmt = $pdo->prepare($countSql);
+    $countStmt->execute($params);
+    $total = (int)($countStmt->fetchColumn() ?: 0);
+
     $sql = 'SELECT p.* FROM payments p';
     if ($where) {
         $sql .= ' WHERE ' . implode(' AND ', $where);
     }
-    $sql .= ' ORDER BY p.id DESC LIMIT ' . $limit;
+    $sql .= ' ORDER BY p.id DESC LIMIT :limit OFFSET :offset';
 
     $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
+    foreach ($params as $paramKey => $paramValue) {
+        $stmt->bindValue($paramKey, $paramValue, PDO::PARAM_STR);
+    }
+    $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+    $stmt->execute();
     
     $payments = $stmt->fetchAll();
     
@@ -45,7 +61,14 @@ function payments_list(): void
         }
     }
 
-    json_response(['success' => true, 'payments' => $payments]);
+    json_response([
+        'success' => true,
+        'payments' => $payments,
+        'total' => $total,
+        'limit' => $limit,
+        'offset' => $offset,
+        'has_more' => ($offset + count($payments)) < $total,
+    ]);
 }
 
 function payments_submit_with_upload(): void

@@ -6,6 +6,8 @@ import { cpanelApi } from '../../lib/cpanelApi'
 import './PaymentManagement.css'
 
 const PAGE_SIZE = 20
+const API_FETCH_BATCH_SIZE = 500
+const MAX_PAYMENT_RECORDS = 3000
 
 const formatFoodPreference = (value, foodIncluded = true) => {
   if (foodIncluded === false || value === null || value === 'null') return 'Food Not Included'
@@ -198,9 +200,42 @@ const loadPaymentsFromLocalStorage = () => {
 const loadPaymentsWithApi = async () => {
   if (cpanelApi.isConfigured()) {
     try {
-      const response = await cpanelApi.listPayments({ limit: 200 })
-      const payments = Array.isArray(response?.payments) ? response.payments : []
-      const normalized = normalizePayments(payments)
+      const allPayments = []
+      let offset = 0
+      let pageCount = 0
+      const maxPages = Math.ceil(MAX_PAYMENT_RECORDS / API_FETCH_BATCH_SIZE)
+
+      while (pageCount < maxPages) {
+        const response = await cpanelApi.listPayments({
+          limit: API_FETCH_BATCH_SIZE,
+          offset
+        })
+        const chunk = Array.isArray(response?.payments) ? response.payments : []
+
+        allPayments.push(...chunk)
+        pageCount += 1
+
+        if (allPayments.length >= MAX_PAYMENT_RECORDS) {
+          break
+        }
+
+        const total = Number(response?.total)
+        if (Number.isFinite(total) && allPayments.length >= Math.min(total, MAX_PAYMENT_RECORDS)) {
+          break
+        }
+
+        if (response?.has_more !== true && chunk.length < API_FETCH_BATCH_SIZE) {
+          break
+        }
+
+        if (chunk.length === 0) {
+          break
+        }
+
+        offset += chunk.length
+      }
+
+      const normalized = normalizePayments(allPayments.slice(0, MAX_PAYMENT_RECORDS))
 
       console.log(`✅ Loaded ${normalized.length} payments from database`)
       return normalized

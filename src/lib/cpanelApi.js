@@ -109,9 +109,9 @@ export const cpanelApi = {
     })
   },
 
-  listPayments: async ({ status, search, limit = 200 } = {}) => {
+  listPayments: async ({ status, search, limit = 200, offset = 0 } = {}) => {
     return request('/payments/list', {
-      query: { status, search, limit }
+      query: { status, search, limit, offset }
     })
   },
 
