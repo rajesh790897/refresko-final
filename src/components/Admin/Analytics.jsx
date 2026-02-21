@@ -6,6 +6,49 @@ import jsPDF from 'jspdf'
 import 'jspdf-autotable'
 import './Analytics.css'
 
+const SUPABASE_BATCH_SIZE = 1000
+const CPANEL_BATCH_SIZE = 500
+
+const normalizeText = (value, fallback = '') => {
+  if (value === null || value === undefined) return fallback
+  const text = String(value).trim()
+  return text || fallback
+}
+
+const normalizePaymentApproved = (paymentApproved, status) => {
+  const approvedValue = normalizeText(paymentApproved).toLowerCase()
+  if (approvedValue === 'approved' || approvedValue === 'declined' || approvedValue === 'pending') {
+    return approvedValue
+  }
+
+  const statusValue = normalizeText(status).toLowerCase()
+  if (statusValue === 'completed') return 'approved'
+  if (statusValue === 'declined') return 'declined'
+  return 'pending'
+}
+
+const normalizeStudentRecord = (student) => ({
+  student_code: normalizeText(student?.student_code || student?.studentCode || student?.code || student?.student_id || student?.studentId),
+  student_name: normalizeText(student?.student_name || student?.studentName || student?.name || student?.full_name, 'Unknown'),
+  department: normalizeText(student?.department, 'Not specified'),
+  year: normalizeText(student?.year || student?.academic_year, 'Not specified'),
+  email: normalizeText(student?.email),
+  phone: normalizeText(student?.phone || student?.mobile)
+})
+
+const normalizePaymentRecord = (payment) => ({
+  payment_id: normalizeText(payment?.payment_id || payment?.paymentId || payment?.id),
+  student_code: normalizeText(payment?.student_code || payment?.studentCode || payment?.student_id || payment?.studentId),
+  student_name: normalizeText(payment?.student_name || payment?.studentName || payment?.name, 'Unknown'),
+  department: normalizeText(payment?.department, 'Not specified'),
+  year: normalizeText(payment?.year || payment?.academic_year, 'Not specified'),
+  amount: Number(payment?.amount) || 0,
+  payment_approved: normalizePaymentApproved(payment?.payment_approved || payment?.paymentApproved, payment?.status),
+  status: normalizeText(payment?.status, 'pending').toLowerCase(),
+  created_at: payment?.created_at || payment?.date || '',
+  reviewed_at: payment?.reviewed_at || payment?.reviewedAt || ''
+})
+
 const Analytics = () => {
   const [students, setStudents] = useState([])
   const [payments, setPayments] = useState([])
@@ -23,6 +66,69 @@ const Analytics = () => {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 50
 
+  const fetchAllSupabaseRows = async (tableName) => {
+    if (!isSupabaseConfigured || !supabase) return []
+
+    let from = 0
+    const allRows = []
+
+    while (true) {
+      const { data, error } = await supabase
+        .from(tableName)
+        .select('*')
+        .range(from, from + SUPABASE_BATCH_SIZE - 1)
+
+      if (error) {
+        throw error
+      }
+
+      const rows = Array.isArray(data) ? data : []
+      if (rows.length === 0) {
+        break
+      }
+
+      allRows.push(...rows)
+
+      if (rows.length < SUPABASE_BATCH_SIZE) {
+        break
+      }
+
+      from += SUPABASE_BATCH_SIZE
+    }
+
+    return allRows
+  }
+
+  const fetchAllCpanelPayments = async () => {
+    if (!cpanelApi.isConfigured()) return []
+
+    const allPayments = []
+    let offset = 0
+    let pageCount = 0
+    const maxPages = 20
+
+    while (pageCount < maxPages) {
+      const response = await cpanelApi.listPayments({ limit: CPANEL_BATCH_SIZE, offset })
+      const chunk = Array.isArray(response?.payments) ? response.payments : []
+
+      allPayments.push(...chunk)
+      pageCount += 1
+
+      const total = Number(response?.total)
+      if (Number.isFinite(total) && allPayments.length >= total) {
+        break
+      }
+
+      if (chunk.length < CPANEL_BATCH_SIZE || response?.has_more !== true) {
+        break
+      }
+
+      offset += chunk.length
+    }
+
+    return allPayments
+  }
+
   // Fetch data from database
   const fetchData = async () => {
     setLoading(true)
@@ -35,44 +141,18 @@ const Analytics = () => {
       // Try Supabase first
       if (isSupabaseConfigured && supabase) {
         try {
-          // Fetch ALL students (remove default 1000 limit)
-          const { data: studentsFromDB, error: studentsError, count: studentsCount } = await supabase
-            .from('students')
-            .select('*', { count: 'exact' })
+          const [studentsFromDB, paymentsFromDB] = await Promise.all([
+            fetchAllSupabaseRows('students'),
+            fetchAllSupabaseRows('payments')
+          ])
 
-          // If we got less than expected, fetch in batches
-          let allStudents = studentsFromDB || []
-          if (studentsCount && studentsCount > 1000 && allStudents.length < studentsCount) {
-            const batchSize = 1000
-            for (let i = 1000; i < studentsCount; i += batchSize) {
-              const { data: batchData } = await supabase
-                .from('students')
-                .select('*')
-                .range(i, i + batchSize - 1)
-              if (batchData) {
-                allStudents = [...allStudents, ...batchData]
-              }
-            }
-          }
+          studentsData = studentsFromDB
+            .map(normalizeStudentRecord)
+            .filter((student) => student.student_code)
 
-          const { data: paymentsFromDB, error: paymentsError } = await supabase
-            .from('payments')
-            .select('*')
-
-          if (!studentsError && allStudents) {
-            // Map Supabase column names to expected format
-            studentsData = allStudents.map(s => ({
-              student_code: s.student_code || s.code,
-              student_name: s.student_name || s.name || s.full_name || 'Unknown',
-              department: s.department || 'Not specified',
-              year: s.year || s.academic_year || 'Not specified',
-              email: s.email || '',
-              phone: s.phone || s.mobile || ''
-            }))
-          }
-          if (!paymentsError && paymentsFromDB) {
-            paymentsData = paymentsFromDB
-          }
+          paymentsData = paymentsFromDB
+            .map(normalizePaymentRecord)
+            .filter((payment) => payment.student_code)
         } catch (supabaseError) {
           console.error('Supabase error:', supabaseError)
         }
@@ -81,29 +161,47 @@ const Analytics = () => {
       // Fallback to cPanel API if Supabase fails or not configured
       if (studentsData.length === 0 && cpanelApi.isConfigured()) {
         try {
-          const paymentsResponse = await cpanelApi.listPayments()
-          if (paymentsResponse.success && Array.isArray(paymentsResponse.payments)) {
-            paymentsData = paymentsResponse.payments
-            
-            // Extract unique students from payments
-            const studentMap = new Map()
-            paymentsData.forEach(payment => {
-              if (payment.student_code) {
-                studentMap.set(payment.student_code, {
-                  student_code: payment.student_code,
-                  student_name: payment.student_name || 'Unknown',
-                  department: payment.department || 'Not specified',
-                  year: payment.year || 'Not specified',
-                  email: payment.email || '',
-                  phone: payment.phone || ''
-                })
-              }
+          const paymentsFromApi = await fetchAllCpanelPayments()
+          paymentsData = paymentsFromApi
+            .map(normalizePaymentRecord)
+            .filter((payment) => payment.student_code)
+
+          const studentMap = new Map()
+          paymentsData.forEach((payment) => {
+            if (!payment.student_code) return
+
+            studentMap.set(payment.student_code, {
+              student_code: payment.student_code,
+              student_name: payment.student_name || 'Unknown',
+              department: payment.department || 'Not specified',
+              year: payment.year || 'Not specified',
+              email: '',
+              phone: ''
             })
-            studentsData = Array.from(studentMap.values())
-          }
+          })
+          studentsData = Array.from(studentMap.values())
         } catch (apiError) {
           console.warn('cPanel API failed:', apiError)
         }
+      }
+
+      // If students table is sparse, enrich from payments table
+      if (studentsData.length === 0 && paymentsData.length > 0) {
+        const studentMap = new Map()
+        paymentsData.forEach((payment) => {
+          if (!payment.student_code) return
+          if (studentMap.has(payment.student_code)) return
+
+          studentMap.set(payment.student_code, {
+            student_code: payment.student_code,
+            student_name: payment.student_name || 'Unknown',
+            department: payment.department || 'Not specified',
+            year: payment.year || 'Not specified',
+            email: '',
+            phone: ''
+          })
+        })
+        studentsData = Array.from(studentMap.values())
       }
 
       setStudents(studentsData)
@@ -141,11 +239,24 @@ const Analytics = () => {
     return matchesDept && matchesYear && matchesSearch
   })
 
-  // Categorize students by payment status
+  const sortedPayments = [...payments].sort((left, right) => {
+    const leftTime = new Date(left.reviewed_at || left.created_at || 0).getTime()
+    const rightTime = new Date(right.reviewed_at || right.created_at || 0).getTime()
+    return rightTime - leftTime
+  })
+
+  const latestPaymentByStudent = sortedPayments.reduce((accumulator, payment) => {
+    if (!payment.student_code) return accumulator
+    if (!accumulator.has(payment.student_code)) {
+      accumulator.set(payment.student_code, payment)
+    }
+    return accumulator
+  }, new Map())
+
   const paidStudentCodes = new Set(
-    payments
-      .filter(p => p.payment_approved === 'approved' || p.status === 'completed')
-      .map(p => p.student_code)
+    Array.from(latestPaymentByStudent.values())
+      .filter((payment) => payment.payment_approved === 'approved')
+      .map((payment) => payment.student_code)
   )
 
   const paidStudents = filteredStudents.filter(s => paidStudentCodes.has(s.student_code))
@@ -170,6 +281,16 @@ const Analytics = () => {
     setCurrentPage(1)
   }, [filterDepartment, filterYear, filterPaymentStatus, searchQuery])
 
+  const approvedRevenueByStudent = Array.from(latestPaymentByStudent.values()).reduce((total, payment) => {
+    if (payment.payment_approved !== 'approved') return total
+    return total + (Number(payment.amount) || 0)
+  }, 0)
+
+  const pendingRevenueByStudent = Array.from(latestPaymentByStudent.values()).reduce((total, payment) => {
+    if (payment.payment_approved !== 'pending') return total
+    return total + (Number(payment.amount) || 0)
+  }, 0)
+
   // Calculate analytics by department
   const departmentAnalytics = departments
     .filter(d => d !== 'all')
@@ -177,13 +298,18 @@ const Analytics = () => {
       const deptStudents = students.filter(s => s.department === dept)
       const deptPaid = deptStudents.filter(s => paidStudentCodes.has(s.student_code))
       const deptUnpaid = deptStudents.filter(s => !paidStudentCodes.has(s.student_code))
+      const deptRevenue = deptStudents.reduce((sum, student) => {
+        const latestPayment = latestPaymentByStudent.get(student.student_code)
+        if (!latestPayment || latestPayment.payment_approved !== 'approved') return sum
+        return sum + (Number(latestPayment.amount) || 0)
+      }, 0)
       
       return {
         department: dept,
         total: deptStudents.length,
         paid: deptPaid.length,
         unpaid: deptUnpaid.length,
-        revenue: deptPaid.length * 600 // Assuming ₹600 per student
+        revenue: deptRevenue
       }
     })
     .sort((a, b) => b.total - a.total)
@@ -195,13 +321,18 @@ const Analytics = () => {
       const yearStudents = students.filter(s => s.year === year)
       const yearPaid = yearStudents.filter(s => paidStudentCodes.has(s.student_code))
       const yearUnpaid = yearStudents.filter(s => !paidStudentCodes.has(s.student_code))
+      const yearRevenue = yearStudents.reduce((sum, student) => {
+        const latestPayment = latestPaymentByStudent.get(student.student_code)
+        if (!latestPayment || latestPayment.payment_approved !== 'approved') return sum
+        return sum + (Number(latestPayment.amount) || 0)
+      }, 0)
       
       return {
         year,
         total: yearStudents.length,
         paid: yearPaid.length,
         unpaid: yearUnpaid.length,
-        revenue: yearPaid.length * 600
+        revenue: yearRevenue
       }
     })
     .sort((a, b) => b.total - a.total)
@@ -210,7 +341,9 @@ const Analytics = () => {
   const totalStudents = filteredStudents.length
   const totalPaid = paidStudents.length
   const totalUnpaid = unpaidStudents.length
-  const totalRevenue = totalPaid * 600
+  const totalRevenue = approvedRevenueByStudent
+  const expectedFromUnpaid = pendingRevenueByStudent
+  const potentialRevenue = totalRevenue + expectedFromUnpaid
   const paymentRate = totalStudents > 0 ? ((totalPaid / totalStudents) * 100).toFixed(1) : 0
 
   // Export Functions
@@ -656,11 +789,11 @@ const Analytics = () => {
                   </div>
                   <div className="summary-item">
                     <span className="summary-label">Expected from Unpaid</span>
-                    <span className="summary-value pending">₹{(totalUnpaid * 600).toLocaleString()}</span>
+                      <span className="summary-value pending">₹{expectedFromUnpaid.toLocaleString()}</span>
                   </div>
                   <div className="summary-item">
                     <span className="summary-label">Potential Total</span>
-                    <span className="summary-value">₹{(totalStudents * 600).toLocaleString()}</span>
+                      <span className="summary-value">₹{potentialRevenue.toLocaleString()}</span>
                   </div>
                 </div>
               </div>
