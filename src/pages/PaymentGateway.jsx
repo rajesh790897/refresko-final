@@ -254,7 +254,7 @@ const PaymentGateway = () => {
   }
 
   const handleConfirmPayment = async () => {
-    const normalizedUtr = utrNumber.trim().toUpperCase()
+    const normalizedUtr = utrNumber.trim()
     const currentStudentId = studentProfile?.studentId || ''
     const savedFoodPreference = localStorage.getItem('foodPreference')
     const normalizedSavedFood = savedFoodPreference && savedFoodPreference !== 'null' ? savedFoodPreference : ''
@@ -294,8 +294,8 @@ const PaymentGateway = () => {
       return
     }
 
-    if (!/^[A-Z0-9]{8,30}$/.test(normalizedUtr)) {
-      setFormError('UTR must be 8-30 characters and contain only letters and numbers')
+    if (!/^\d{12}$/.test(normalizedUtr)) {
+      setFormError('UTR must be exactly 12 digits and contain numbers only')
       return
     }
 
@@ -593,13 +593,17 @@ const PaymentGateway = () => {
                       type="text"
                       value={utrNumber}
                       onChange={(event) => {
-                        setUtrNumber(event.target.value)
+                        const digitsOnly = event.target.value.replace(/\D/g, '').slice(0, 12)
+                        setUtrNumber(digitsOnly)
                         if (formError) setFormError('')
                       }}
-                      placeholder="Enter unique UTR"
+                      placeholder="Enter 12-digit UTR"
                       autoComplete="off"
+                      inputMode="numeric"
+                      pattern="[0-9]{12}"
+                      maxLength={12}
                     />
-                    <p className="field-hint">UTR must be unique for each user</p>
+                    <p className="field-hint">UTR must be exactly 12 digits and unique for each user</p>
                   </div>
 
                   {formError && <p className="payment-error">{formError}</p>}
