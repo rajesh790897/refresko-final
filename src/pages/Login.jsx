@@ -8,10 +8,10 @@ import './Login.css'
 const normalizePhone = (value) => value.replace(/\D/g, '')
 
 const Login = () => {
-  const isLoginDisabled = true
   const navigate = useNavigate()
   const location = useLocation()
   const isAdminLoginMode = location.pathname.endsWith('/admin') || new URLSearchParams(location.search).get('role') === 'admin'
+  const isLoginDisabled = isAdminLoginMode
   const [formData, setFormData] = useState({
     email: '',
     password: ''

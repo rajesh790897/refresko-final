@@ -3,10 +3,17 @@ import { motion } from 'framer-motion'
 import './Login.css'
 
 const LoginSelection = () => {
-  const isLoginDisabled = true
+  const isStudentLoginDisabled = false
+  const isAdminLoginDisabled = true
 
-  const blockLoginNavigation = (event) => {
-    if (isLoginDisabled) {
+  const blockStudentLoginNavigation = (event) => {
+    if (isStudentLoginDisabled) {
+      event.preventDefault()
+    }
+  }
+
+  const blockAdminLoginNavigation = (event) => {
+    if (isAdminLoginDisabled) {
       event.preventDefault()
     }
   }
@@ -54,14 +61,14 @@ const LoginSelection = () => {
               display: 'block',
               textDecoration: 'none',
               marginBottom: '16px',
-              opacity: isLoginDisabled ? 0.6 : 1,
-              pointerEvents: isLoginDisabled ? 'none' : 'auto',
-              cursor: isLoginDisabled ? 'not-allowed' : 'pointer'
+              opacity: isStudentLoginDisabled ? 0.6 : 1,
+              pointerEvents: isStudentLoginDisabled ? 'none' : 'auto',
+              cursor: isStudentLoginDisabled ? 'not-allowed' : 'pointer'
             }}
-            onClick={blockLoginNavigation}
-            aria-disabled={isLoginDisabled}
+            onClick={blockStudentLoginNavigation}
+            aria-disabled={isStudentLoginDisabled}
           >
-            <span>{isLoginDisabled ? 'STUDENT LOGIN DISABLED' : 'STUDENT LOGIN'}</span>
+            <span>{isStudentLoginDisabled ? 'STUDENT LOGIN DISABLED' : 'STUDENT LOGIN'}</span>
           </Link>
 
           <Link
@@ -70,14 +77,14 @@ const LoginSelection = () => {
             style={{
               display: 'block',
               textDecoration: 'none',
-              opacity: isLoginDisabled ? 0.6 : 1,
-              pointerEvents: isLoginDisabled ? 'none' : 'auto',
-              cursor: isLoginDisabled ? 'not-allowed' : 'pointer'
+              opacity: isAdminLoginDisabled ? 0.6 : 1,
+              pointerEvents: isAdminLoginDisabled ? 'none' : 'auto',
+              cursor: isAdminLoginDisabled ? 'not-allowed' : 'pointer'
             }}
-            onClick={blockLoginNavigation}
-            aria-disabled={isLoginDisabled}
+            onClick={blockAdminLoginNavigation}
+            aria-disabled={isAdminLoginDisabled}
           >
-            <span>{isLoginDisabled ? 'ADMIN LOGIN DISABLED' : 'ADMIN LOGIN'}</span>
+            <span>{isAdminLoginDisabled ? 'ADMIN LOGIN DISABLED' : 'ADMIN LOGIN'}</span>
           </Link>
         </motion.div>
       </motion.div>
