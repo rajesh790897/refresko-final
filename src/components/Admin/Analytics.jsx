@@ -218,10 +218,6 @@ const Analytics = () => {
 
   useEffect(() => {
     fetchData()
-    
-    // Auto-refresh every 1 minute for real-time data
-    const interval = setInterval(fetchData, 60000)
-    return () => clearInterval(interval)
   }, [])
 
   // Get unique departments and years

@@ -157,14 +157,9 @@ const PaymentGateway = () => {
       try {
         // Use uploaded QR code from config if available, otherwise fallback to static
         const qrCodePath = activePaymentOption.qrCodeUrl || '/image.png'
-        
-        // Add cache-busting timestamp to force fresh load
-        const cacheBustedUrl = qrCodePath.includes('data:image') 
-          ? qrCodePath // Don't add timestamp to base64 data URLs
-          : `${qrCodePath}?v=${Date.now()}`
-        
+
         if (isMounted) {
-          setPaymentQrCodeUrl(cacheBustedUrl)
+          setPaymentQrCodeUrl(qrCodePath)
         }
       } catch {
         if (isMounted) {
@@ -175,16 +170,8 @@ const PaymentGateway = () => {
 
     generatePaymentQrCode()
 
-    // Auto-refresh QR code every 1 minute to clear cache
-    const refreshInterval = setInterval(() => {
-      if (isMounted) {
-        generatePaymentQrCode()
-      }
-    }, 60000) // 60000ms = 1 minute
-
     return () => {
       isMounted = false
-      clearInterval(refreshInterval)
     }
   }, [activePaymentOption])
 

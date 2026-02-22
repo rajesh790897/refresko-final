@@ -280,18 +280,12 @@ const SKFDashboard = () => {
       }
     }
 
-    // Periodic polling to check database for payment status updates (cross-device sync)
-    const pollInterval = setInterval(() => {
-      syncPaymentStatus()
-    }, 15000) // Check every 15 seconds
-
     window.addEventListener('storage', handleStorageUpdate)
     window.addEventListener('paymentSubmissionsUpdated', syncPaymentStatus)
     window.addEventListener('paymentConfigUpdated', handlePaymentConfigUpdate)
     
     return () => {
       document.body.classList.remove('system-cursor')
-      clearInterval(pollInterval)
       window.removeEventListener('storage', handleStorageUpdate)
       window.removeEventListener('paymentSubmissionsUpdated', syncPaymentStatus)
       window.removeEventListener('paymentConfigUpdated', handlePaymentConfigUpdate)
