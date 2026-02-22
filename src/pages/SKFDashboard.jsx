@@ -35,7 +35,7 @@ const SKFDashboard = () => {
     () => getActivePaymentOption(paymentConfig),
     [paymentConfig]
   )
-  const configuredPaymentAmount = Number(activePaymentOption?.amount) || 600
+  const configuredPaymentAmount = Number(activePaymentOption?.amount) || 500
   const isFoodIncluded = Boolean(activePaymentOption?.includeFood)
 
   // Fetch payment status from database (cross-device sync)
