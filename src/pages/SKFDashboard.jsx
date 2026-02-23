@@ -86,27 +86,6 @@ const SKFDashboard = () => {
       // Try Supabase as fallback
       if (isSupabaseConfigured && supabase) {
         if (studentRecord) {
-          // Get latest payment from payments table
-          const { data: paymentsData } = await supabase
-            .from('payments')
-            .select('*')
-            .eq('student_code', studentCode.trim().toUpperCase())
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .single()
-
-          if (paymentsData) {
-            return {
-              status: paymentsData.status || (studentRecord.payment_approved === 'approved' ? 'completed' : 'pending'),
-              payment_approved: studentRecord.payment_approved,
-              payment_completion: Boolean(studentRecord.payment_completion),
-              amount: paymentsData.amount,
-              utrNo: paymentsData.utr_no,
-              transactionId: paymentsData.utr_no,
-              date: paymentsData.created_at
-            }
-          }
-
           return {
             status: studentRecord.payment_approved === 'approved' ? 'completed' : 'pending',
             payment_approved: studentRecord.payment_approved || 'pending',
