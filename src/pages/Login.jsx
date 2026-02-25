@@ -178,8 +178,24 @@ const Login = () => {
         localStorage.removeItem('profileCompleted')
         navigate('/profile-setup')
       } catch (err) {
-        console.error('Student login verification failed:', err)
-        setError('Unable to verify student credentials right now. Please try again.')
+          console.error('Student login verification failed:', {
+            message: err?.message,
+            code: err?.code,
+            status: err?.status,
+            time: new Date().toISOString()
+          })
+        
+          // Provide more specific error messages
+          let errorMsg = 'Unable to verify credentials. Please try again.'
+          if (err?.message?.includes('fetch') || err?.message?.includes('network')) {
+            errorMsg = 'Network error. Check your connection and retry.'
+          } else if (err?.message?.includes('timeout')) {
+            errorMsg = 'Request timeout. Please try again.'
+          } else if (err?.status === 401 || err?.status === 403) {
+            errorMsg = 'Authentication failed. Contact support if this persists.'
+          }
+        
+          setError(errorMsg)
         setIsLoading(false)
       }
     }, 800)

@@ -132,7 +132,7 @@ const SKFDashboard = () => {
 
       // Merge database status with localStorage data (database takes priority)
       const normalizedAmount = Number(latest?.amount || dbPaymentStatus?.amount)
-      const nextAmount = normalizedAmount > 0 && normalizedAmount !== 500 ? normalizedAmount : configuredPaymentAmount
+      const nextAmount = normalizedAmount > 0 ? normalizedAmount : configuredPaymentAmount
       
       const finalPaymentData = {
         ...(latest || {}),
