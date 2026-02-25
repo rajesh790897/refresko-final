@@ -264,13 +264,6 @@ const PaymentManagement = () => {
     }
 
     refreshPayments()
-
-    // Listen for payment updates (triggered after successful submission)
-    window.addEventListener('paymentSubmissionsUpdated', refreshPayments)
-
-    return () => {
-      window.removeEventListener('paymentSubmissionsUpdated', refreshPayments)
-    }
   }, [])
 
   const filteredPayments = payments.filter(payment => {

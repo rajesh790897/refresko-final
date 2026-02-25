@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { gsap } from 'gsap'
 import './Navbar.css'
 
 const Navbar = () => {
@@ -33,28 +32,6 @@ const Navbar = () => {
 
     document.addEventListener('mousedown', handleOutsideClick)
     return () => document.removeEventListener('mousedown', handleOutsideClick)
-  }, [])
-
-  // Neon flicker effect on 2026
-  useEffect(() => {
-    const flickerAnimation = () => {
-      const year = logoRef.current?.querySelector('.logo-year')
-      if (year) {
-        gsap.to(year, {
-          opacity: 0.3,
-          duration: 0.05,
-          yoyo: true,
-          repeat: 3,
-          ease: 'power2.inOut',
-          onComplete: () => {
-            gsap.to(year, { opacity: 1, duration: 0.1 })
-          }
-        })
-      }
-    }
-
-    const interval = setInterval(flickerAnimation, 4000)
-    return () => clearInterval(interval)
   }, [])
 
   return (

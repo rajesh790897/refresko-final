@@ -69,15 +69,6 @@ const Performers = () => {
   const [activePerformer, setActivePerformer] = useState(0)
 
   useEffect(() => {
-    // Cycle through performers every 2 seconds
-    const interval = setInterval(() => {
-      setActivePerformer((prev) => (prev + 1) % performers.length)
-    }, 2000)
-
-    return () => clearInterval(interval)
-  }, [])
-
-  useEffect(() => {
     // Auto-scroll to active performer on mobile
     if (scrollRef.current) {
       const container = scrollRef.current

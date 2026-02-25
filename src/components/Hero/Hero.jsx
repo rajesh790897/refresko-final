@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { gsap } from 'gsap'
@@ -6,57 +6,8 @@ import './Hero.css'
 
 const Hero = () => {
   const titleRef = useRef(null)
-  const [displayText, setDisplayText] = useState('')
   const targetText = 'REFRESKO 2026'
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ!@#$%^&*()_+='
-  const decodeTimerRef = useRef(null)
-
-  const startDecode = useCallback(() => {
-    let iteration = 0
-
-    if (decodeTimerRef.current) {
-      clearInterval(decodeTimerRef.current)
-    }
-
-    decodeTimerRef.current = setInterval(() => {
-      setDisplayText(
-        targetText
-          .split('')
-          .map((char, index) => {
-            if (index < iteration) {
-              return targetText[index]
-            }
-            if (char === ' ') return ' '
-            return chars[Math.floor(Math.random() * chars.length)]
-          })
-          .join('')
-      )
-
-      if (iteration >= targetText.length) {
-        clearInterval(decodeTimerRef.current)
-        decodeTimerRef.current = null
-      }
-
-      iteration += 1 / 2
-    }, 40)
-  }, [chars, targetText])
-
-  useEffect(() => {
-    // Initial decoding text animation
-    startDecode()
-
-    // Repeat animation every 3 seconds
-    const repeatInterval = setInterval(() => {
-      startDecode()
-    }, 3000)
-
-    return () => {
-      if (decodeTimerRef.current) {
-        clearInterval(decodeTimerRef.current)
-      }
-      clearInterval(repeatInterval)
-    }
-  }, [startDecode])
+  const [displayText] = useState(targetText)
 
   // Magnetic button effect
   useEffect(() => {

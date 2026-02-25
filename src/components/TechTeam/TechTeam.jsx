@@ -60,13 +60,6 @@ const TechTeam = () => {
   const [activeMember, setActiveMember] = useState(0)
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setActiveMember((prev) => (prev + 1) % teamMembers.length)
-    }, 2000)
-    return () => clearInterval(interval)
-  }, [])
-
-  useEffect(() => {
     if (scrollRef.current) {
       const container = scrollRef.current
       const cards = container.querySelectorAll('.team-member-card')

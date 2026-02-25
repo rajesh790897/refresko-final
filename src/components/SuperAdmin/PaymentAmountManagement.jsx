@@ -39,30 +39,6 @@ const PaymentAmountManagement = () => {
     setActiveOptionId(config.activeOptionId)
   }, [config])
 
-  useEffect(() => {
-    const refreshConfig = async () => {
-      try {
-        const dbConfig = await loadPaymentConfigWithApi()
-        setConfig(dbConfig)
-      } catch {
-        setConfig(loadPaymentConfig())
-      }
-    }
-
-    const handleStorageUpdate = (event) => {
-      if (event.key === 'paymentGatewayConfig') {
-        refreshConfig()
-      }
-    }
-
-    window.addEventListener('storage', handleStorageUpdate)
-    window.addEventListener('paymentConfigUpdated', refreshConfig)
-
-    return () => {
-      window.removeEventListener('storage', handleStorageUpdate)
-      window.removeEventListener('paymentConfigUpdated', refreshConfig)
-    }
-  }, [])
 
   const activeOption = useMemo(() => getActivePaymentOption({
     activeOptionId,

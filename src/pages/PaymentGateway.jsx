@@ -120,28 +120,8 @@ const PaymentGateway = () => {
 
     initializeStudentProfile()
 
-    const refreshPaymentConfig = async () => {
-      try {
-        const config = await loadPaymentConfigWithApi()
-        setPaymentConfig(config)
-      } catch {
-        setPaymentConfig(loadPaymentConfig())
-      }
-    }
-
-    const handleStorageUpdate = (event) => {
-      if (event.key === 'paymentGatewayConfig') {
-        refreshPaymentConfig()
-      }
-    }
-
-    window.addEventListener('storage', handleStorageUpdate)
-    window.addEventListener('paymentConfigUpdated', refreshPaymentConfig)
-
     return () => {
       document.body.classList.remove('system-cursor')
-      window.removeEventListener('storage', handleStorageUpdate)
-      window.removeEventListener('paymentConfigUpdated', refreshPaymentConfig)
     }
   }, [navigate])
 

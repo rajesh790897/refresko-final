@@ -229,45 +229,8 @@ const SKFDashboard = () => {
       }
     }
 
-    const syncPaymentStatus = () => {
-      const updatedProfile = localStorage.getItem('studentProfile')
-      if (updatedProfile) {
-        try {
-          findLatestStudentPayment(JSON.parse(updatedProfile))
-        } catch {
-          findLatestStudentPayment(null)
-        }
-      }
-    }
-
-    const handleStorageUpdate = (event) => {
-      if (event.key === 'paymentSubmissions') {
-        syncPaymentStatus()
-      }
-
-      if (event.key === 'paymentGatewayConfig') {
-        setPaymentConfig(loadPaymentConfig())
-      }
-    }
-
-    const handlePaymentConfigUpdate = async () => {
-      try {
-        const config = await loadPaymentConfigWithApi()
-        setPaymentConfig(config)
-      } catch {
-        setPaymentConfig(loadPaymentConfig())
-      }
-    }
-
-    window.addEventListener('storage', handleStorageUpdate)
-    window.addEventListener('paymentSubmissionsUpdated', syncPaymentStatus)
-    window.addEventListener('paymentConfigUpdated', handlePaymentConfigUpdate)
-    
     return () => {
       document.body.classList.remove('system-cursor')
-      window.removeEventListener('storage', handleStorageUpdate)
-      window.removeEventListener('paymentSubmissionsUpdated', syncPaymentStatus)
-      window.removeEventListener('paymentConfigUpdated', handlePaymentConfigUpdate)
     }
   }, [navigate])
 

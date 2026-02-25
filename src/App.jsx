@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
 import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import Navbar from './components/Navbar/Navbar'
@@ -17,29 +17,6 @@ gsap.registerPlugin(ScrollTrigger)
 
 function App() {
   const mainRef = useRef(null)
-
-  useEffect(() => {
-    // Red Shift Glitch Effect
-    const glitchInterval = setInterval(() => {
-      const container = mainRef.current
-      if (container) {
-        gsap.to(container, {
-          x: -5,
-          duration: 0.05,
-          ease: 'power2.out',
-          onComplete: () => {
-            gsap.to(container, {
-              x: 0,
-              duration: 0.1,
-              ease: 'elastic.out(1, 0.3)'
-            })
-          }
-        })
-      }
-    }, Math.random() * 3000 + 5000) // Random interval between 5-8 seconds
-
-    return () => clearInterval(glitchInterval)
-  }, [])
 
   return (
     <div className="app">
