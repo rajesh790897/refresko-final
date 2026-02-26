@@ -3,9 +3,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import QRCode from 'qrcode'
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient'
-import { cpanelApi } from '../lib/cpanelApi'
+
 import { getActivePaymentOption, loadPaymentConfig } from '../lib/paymentConfig'
-import { loadPaymentConfigWithApi } from '../lib/paymentConfigApi'
 import './SKFDashboard.css'
 
 // Default data structure
@@ -57,33 +56,7 @@ const SKFDashboard = () => {
         }
       }
 
-      // Try cPanel API first
-      if (cpanelApi.isConfigured()) {
-        try {
-          const response = await cpanelApi.listPayments()
-          if (response.success && Array.isArray(response.payments)) {
-            const studentPayment = response.payments
-              .filter(p => (p.student_code || '').trim().toUpperCase() === studentCode.trim().toUpperCase())
-              .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))[0]
-            
-            if (studentPayment) {
-              return {
-                status: studentPayment.status,
-                payment_approved: studentRecord?.payment_approved || studentPayment.payment_approved,
-                payment_completion: Boolean(studentRecord?.payment_completion),
-                amount: studentPayment.amount,
-                utrNo: studentPayment.utr_no,
-                transactionId: studentPayment.utr_no,
-                date: studentPayment.created_at
-              }
-            }
-          }
-        } catch (apiError) {
-          console.warn('API fetch failed, trying Supabase:', apiError)
-        }
-      }
-
-      // Try Supabase as fallback
+      // Use localStorage as primary source (no backend API calls)
       if (isSupabaseConfigured && supabase) {
         if (studentRecord) {
           return {
@@ -95,7 +68,7 @@ const SKFDashboard = () => {
         }
       }
     } catch (error) {
-      console.error('Failed to fetch payment status from database:', error)
+      console.warn('Failed to fetch payment status from database:', error)
     }
     return null
   }
@@ -183,17 +156,8 @@ const SKFDashboard = () => {
   useEffect(() => {
     document.body.classList.add('system-cursor')
     
-    // Load payment config from database first (cross-device sync)
-    const loadConfig = async () => {
-      try {
-        const config = await loadPaymentConfigWithApi()
-        setPaymentConfig(config)
-      } catch (error) {
-        console.warn('Failed to load payment config from API, using localStorage:', error)
-        setPaymentConfig(loadPaymentConfig())
-      }
-    }
-    loadConfig()
+    // Use localStorage config (API disabled due to CORS)
+    setPaymentConfig(loadPaymentConfig())
     
     // Check authentication
     const isAuthenticated = localStorage.getItem('isAuthenticated')

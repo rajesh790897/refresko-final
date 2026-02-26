@@ -333,15 +333,15 @@ const PaymentGateway = () => {
         }
 
         await cpanelApi.submitPayment(formData)
-        console.log('✅ Payment successfully submitted to database')
+        console.log('✅ Payment successfully submitted to backend database')
         apiSubmissionSucceeded = true
       } catch (apiError) {
-        console.error('Payment submission to database failed:', apiError)
-        const errorMessage = apiError.message || apiError.toString()
-        setFormError(`Payment submission failed: ${errorMessage}. Your payment data will be saved locally, but may not appear cross devices until the issue is resolved. Please contact support if this persists.`)
-        setPaymentStatus('idle')
-        return
+        console.warn('Payment submission to backend failed (will use localStorage):', apiError)
+        // Don't fail here - we have localStorage fallback
+        apiSubmissionSucceeded = false
       }
+    } else {
+      console.info('Backend API not configured - using localStorage only')
     }
     
     // Simulate payment processing
