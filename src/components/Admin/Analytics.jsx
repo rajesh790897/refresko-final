@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { cpanelApi } from '../../lib/cpanelApi'
 import { supabase, isSupabaseConfigured } from '../../lib/supabaseClient'
 import jsPDF from 'jspdf'
 import 'jspdf-autotable'
@@ -100,33 +99,8 @@ const Analytics = () => {
   }
 
   const fetchAllCpanelPayments = async () => {
-    if (!cpanelApi.isConfigured()) return []
-
-    const allPayments = []
-    let offset = 0
-    let pageCount = 0
-    const maxPages = 20
-
-    while (pageCount < maxPages) {
-      const response = await cpanelApi.listPayments({ limit: CPANEL_BATCH_SIZE, offset })
-      const chunk = Array.isArray(response?.payments) ? response.payments : []
-
-      allPayments.push(...chunk)
-      pageCount += 1
-
-      const total = Number(response?.total)
-      if (Number.isFinite(total) && allPayments.length >= total) {
-        break
-      }
-
-      if (chunk.length < CPANEL_BATCH_SIZE || response?.has_more !== true) {
-        break
-      }
-
-      offset += chunk.length
-    }
-
-    return allPayments
+    // API disabled - using localStorage only
+    return []
   }
 
   // Fetch data from database
@@ -158,8 +132,8 @@ const Analytics = () => {
         }
       }
 
-      // Fallback to cPanel API if Supabase fails or not configured
-      if (studentsData.length === 0 && cpanelApi.isConfigured()) {
+      // Fallback to cPanel API if Supabase fails or not configured (disabled)
+      if (studentsData.length === 0) {
         try {
           const paymentsFromApi = await fetchAllCpanelPayments()
           paymentsData = paymentsFromApi

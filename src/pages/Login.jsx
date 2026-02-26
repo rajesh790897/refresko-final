@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient'
-import { cpanelApi } from '../lib/cpanelApi'
 import './Login.css'
 
 const normalizePhone = (value) => value.replace(/\D/g, '')
@@ -67,26 +66,7 @@ const Login = () => {
 
     // Keep a small delay for UI consistency
     setTimeout(async () => {
-      if (isAdminLoginMode && cpanelApi.isConfigured()) {
-        try {
-          const response = await cpanelApi.adminLogin({ email: formData.email, password: formData.password })
-
-          if (response?.success && response?.admin) {
-            localStorage.removeItem('isAuthenticated')
-            localStorage.setItem('adminAuthenticated', 'true')
-            localStorage.setItem('adminLoginEmail', response.admin.email)
-            navigate('/admin')
-            return
-          }
-
-          setError('Invalid credentials. Please try again.')
-          setIsLoading(false)
-          return
-        } catch (apiError) {
-          console.warn('cPanel admin login failed, trying localStorage:', apiError)
-        }
-      }
-
+      // Admin login - check localStorage only (API disabled)
       let adminAccounts = []
       try {
         const savedAdmins = localStorage.getItem('adminAccounts')
@@ -122,51 +102,33 @@ const Login = () => {
 
         let data = null
 
-        if (cpanelApi.isConfigured()) {
-          try {
-            const response = await cpanelApi.getStudent(studentCode)
-            if (response?.success && response?.student) {
-              data = response.student
-            } else if (response?.message) {
-              throw new Error(response.message)
-            }
-          } catch (apiError) {
-            if (apiError.code === 'TIMEOUT') {
-              console.warn('Backend API timed out, falling back to Supabase:', apiError.message)
-            } else {
-              console.warn('Backend student lookup failed:', apiError)
-            }
-          }
+        // Use Supabase only (backend API disabled)
+        if (!isSupabaseConfigured || !supabase) {
+          setError('Login service unavailable. Supabase is not configured.')
+          setIsLoading(false)
+          return
         }
 
-        if (!data) {
-          if (!isSupabaseConfigured || !supabase) {
-            setError('Login service unavailable. Backend API is not responding and Supabase is not configured.')
+        try {
+          const { data: supabaseData, error: fetchError } = await supabase
+            .from('students')
+            .select('name, student_code, email, phone, department, year, profile_completed, payment_completion, gate_pass_created, payment_approved, food_included, food_preference')
+            .eq('student_code', studentCode)
+            .maybeSingle()
+          
+          if (fetchError) {
+            console.error('Supabase fetch error:', fetchError)
+            setError('Database connection error. Please check your internet connection.')
             setIsLoading(false)
             return
           }
-
-          try {
-            const { data: supabaseData, error: fetchError } = await supabase
-              .from('students')
-              .select('name, student_code, email, phone, department, year, profile_completed, payment_completion, gate_pass_created, payment_approved, food_included, food_preference')
-              .eq('student_code', studentCode)
-              .maybeSingle()
-            
-            if (fetchError) {
-              console.error('Supabase fetch error:', fetchError)
-              setError('Database connection error. Please check your internet connection.')
-              setIsLoading(false)
-              return
-            }
-            
-            data = supabaseData
-          } catch (supabaseError) {
-            console.error('Supabase connection failed:', supabaseError)
-            setError('Unable to connect to the database. Please check your internet connection and try again.')
-            setIsLoading(false)
-            return
-          }
+          
+          data = supabaseData
+        } catch (supabaseError) {
+          console.error('Supabase connection failed:', supabaseError)
+          setError('Unable to connect to the database. Please check your internet connection and try again.')
+          setIsLoading(false)
+          return
         }
 
         if (!data) {
