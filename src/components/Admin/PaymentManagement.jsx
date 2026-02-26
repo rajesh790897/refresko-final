@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import { isSupabaseConfigured, supabase } from '../../lib/supabaseClient'
+import { cpanelApi } from '../../lib/cpanelApi'
 import './PaymentManagement.css'
 
 const PAGE_SIZE = 20
@@ -55,7 +56,7 @@ const normalizePayments = (records) => {
     // Build full screenshot URL from payment data
     let screenshotUrl = payment.screenshot || payment.paymentScreenshot || null
     
-    // Storage is now localStorage/Supabase only, no API path reconstruction needed
+    // Prefer API-provided screenshot URLs when available
 
     return {
       id: payment.payment_id || payment.id || `PAY${Date.now()}_${index + 1}`,
@@ -191,12 +192,38 @@ const loadPaymentsFromLocalStorage = () => {
 }
 
 const loadPaymentsWithApi = async () => {
-  // Backend API disabled - use localStorage only
+  if (cpanelApi.isConfigured()) {
+    try {
+      const allPayments = []
+      let offset = 0
+
+      while (allPayments.length < MAX_PAYMENT_RECORDS) {
+        const response = await cpanelApi.listPayments({
+          limit: API_FETCH_BATCH_SIZE,
+          offset
+        })
+        const chunk = Array.isArray(response?.payments) ? response.payments : []
+        allPayments.push(...chunk)
+
+        if (chunk.length < API_FETCH_BATCH_SIZE || response?.has_more !== true) {
+          break
+        }
+
+        offset += chunk.length
+      }
+
+      const normalized = normalizePayments(allPayments.slice(0, MAX_PAYMENT_RECORDS))
+      console.log(`✅ Loaded ${normalized.length} payments from MySQL API`)
+      return normalized
+    } catch (error) {
+      console.warn('Failed to load payments from MySQL API:', error)
+    }
+  }
+
   try {
     const savedPayments = localStorage.getItem('paymentSubmissions')
     const allPayments = savedPayments ? JSON.parse(savedPayments) : []
     const normalized = normalizePayments(Array.isArray(allPayments) ? allPayments.slice(0, MAX_PAYMENT_RECORDS) : [])
-    console.log(`✅ Loaded ${normalized.length} payments from localStorage`)
     return normalized
   } catch (error) {
     console.warn('Failed to load payments from localStorage:', error)
@@ -368,110 +395,75 @@ const PaymentManagement = () => {
     console.log('Downloading receipt for:', payment.id)
   }
 
-  const getPaymentScreenshotSource = (payment) => {
-    if (!payment) return ''
+  const handleUpdatePaymentStatus = async (paymentId, status) => {
+    try {
+      const nextStatus = status === 'approved' ? 'completed' : status
 
-    if (typeof payment.screenshot === 'string' && payment.screenshot.trim()) {
-      return payment.screenshot
-    }
+      if (cpanelApi.isConfigured()) {
+        await cpanelApi.updatePaymentDecision({
+          paymentId,
+          decision: status
+        })
 
-    const keys = [payment.utrNo, payment.transactionId, payment.id].filter(Boolean)
-    for (const key of keys) {
-      const storedScreenshot = localStorage.getItem(`paymentScreenshot:${key}`)
-      if (storedScreenshot) {
-        return storedScreenshot
+        const refreshed = await loadPaymentsWithApi()
+        setPayments(refreshed)
+      } else {
+        const savedPayments = localStorage.getItem('paymentSubmissions')
+        const parsedPayments = savedPayments ? JSON.parse(savedPayments) : []
+
+        const updatedPayments = Array.isArray(parsedPayments)
+          ? parsedPayments.map((payment) => {
+              const currentId = payment.id || ''
+              if (currentId !== paymentId) return payment
+
+              return {
+                ...payment,
+                status: nextStatus,
+                payment_approved: status === 'approved' ? 'approved' : 'declined',
+                reviewedAt: new Date().toISOString()
+              }
+            })
+          : []
+
+        localStorage.setItem('paymentSubmissions', JSON.stringify(updatedPayments))
+        window.dispatchEvent(new Event('paymentSubmissionsUpdated'))
+        setPayments(normalizePayments(updatedPayments))
       }
+
+      // Find student code for Supabase sync
+      const targetPayment = payments.find(p => p.id === paymentId)
+      const studentCode = (targetPayment?.studentCode || '').trim().toUpperCase()
+
+      // Sync to Supabase if configured
+      if (isSupabaseConfigured && supabase && studentCode) {
+        try {
+          await supabase
+            .from('students')
+            .update({
+              payment_completion: status === 'declined' ? false : true,
+              gate_pass_created: status === 'approved' ? true : false,
+              payment_approved: status === 'approved' ? 'approved' : 'declined'
+            })
+            .eq('student_code', studentCode)
+          console.log('Supabase synced successfully for:', studentCode)
+        } catch (supabaseError) {
+          console.error('Unable to sync admin payment decision to Supabase:', supabaseError)
+        }
+      }
+
+      setSelectedPayment((previous) => (
+        previous && previous.id === paymentId
+          ? {
+              ...previous,
+              status: nextStatus,
+              paymentApproved: status === 'approved' ? 'approved' : 'declined'
+            }
+          : previous
+      ))
+    } catch (error) {
+      console.error('Failed to update payment status', error)
     }
-
-    return ''
   }
-
-  const handleViewUploadedImage = (payment) => {
-    const screenshotSource = getPaymentScreenshotSource(payment)
-    if (!screenshotSource) {
-      window.alert('No uploaded payment screenshot found for this transaction.')
-      return
-    }
-
-    setSelectedScreenshot({
-      src: screenshotSource,
-      name: payment?.screenshotName || 'Payment Screenshot',
-      paymentId: payment?.id || ''
-    })
-  }
-
-  const handleExportCsv = () => {
-    if (payments.length === 0) {
-      return
-    }
-
-    const csvContent = toCsvContent(payments)
-    const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-
-    link.href = url
-    link.setAttribute('download', `payments_receipts_export_${timestamp}.csv`)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
-  }
-
-  return (
-    <div className="payment-management">
-      {/* Summary Cards */}
-      <div className="summary-cards">
-        <motion.div
-          className="summary-card"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          <div className="card-icon revenue">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="12" y1="1" x2="12" y2="23"/>
-              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-            </svg>
-          </div>
-          <div className="card-content">
-            <h3>Total Revenue</h3>
-            <p className="card-value">₹{totalRevenue.toLocaleString()}</p>
-            <span className="card-label">Completed Payments</span>
-          </div>
-        </motion.div>
-
-        <motion.div
-          className="summary-card"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.1 }}
-        >
-          <div className="card-icon pending">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10"/>
-              <polyline points="12 6 12 12 16 14"/>
-            </svg>
-          </div>
-          <div className="card-content">
-            <h3>Pending Amount</h3>
-            <p className="card-value">₹{pendingAmount.toLocaleString()}</p>
-            <span className="card-label">Awaiting Confirmation</span>
-          </div>
-        </motion.div>
-
-        <motion.div
-          className="summary-card"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
-        >
-          <div className="card-icon total">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-              <circle cx="8.5" cy="7" r="4"/>
-              <line x1="20" y1="8" x2="20" y2="14"/>
               <line x1="23" y1="11" x2="17" y2="11"/>
             </svg>
           </div>
