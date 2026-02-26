@@ -182,5 +182,11 @@ export const cpanelApi = {
       },
       body: JSON.stringify({ admin_id: adminId })
     })
+  },
+
+  getStudent: async (studentCode) => {
+    return request('/students/get', {
+      query: { student_code: studentCode }
+    })
   }
 }

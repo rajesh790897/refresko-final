@@ -7,18 +7,19 @@
   justify-content: center;
   position: relative;
   padding: 60px 20px;
-  background: radial-gradient(circle at center, rgba(255, 0, 51, 0.12), transparent 50%),
-    radial-gradient(ellipse at top left, rgba(255, 0, 51, 0.08), transparent 60%);
+  background: radial-gradient(1200px 600px at 10% -10%, rgba(255, 0, 51, 0.22), transparent 60%),
+    radial-gradient(900px 500px at 90% 0%, rgba(255, 102, 128, 0.12), transparent 55%),
+    linear-gradient(180deg, #050505 0%, #090909 45%, #050505 100%);
   overflow: hidden;
 }
 
 .profile-setup-page::before {
   content: '';
   position: absolute;
-  top: -20%;
-  right: -10%;
-  width: 500px;
-  height: 500px;
+  top: -25%;
+  right: -12%;
+  width: 560px;
+  height: 560px;
   border-radius: 50%;
   background: radial-gradient(circle, rgba(255, 0, 51, 0.25), transparent 70%);
   filter: blur(80px);
@@ -30,10 +31,10 @@
 .profile-setup-page::after {
   content: '';
   position: absolute;
-  bottom: -15%;
-  left: -8%;
-  width: 600px;
-  height: 600px;
+  bottom: -20%;
+  left: -10%;
+  width: 640px;
+  height: 640px;
   border-radius: 50%;
   background: radial-gradient(circle, rgba(255, 0, 51, 0.2), transparent 70%);
   filter: blur(100px);
@@ -50,13 +51,15 @@
 .profile-setup-container {
   max-width: 800px;
   width: 100%;
-  background: rgba(10, 10, 10, 0.85);
+  background: linear-gradient(160deg, rgba(16, 16, 16, 0.94), rgba(7, 7, 7, 0.9));
   backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 0, 51, 0.2);
+  border: 1px solid rgba(255, 0, 51, 0.25);
   padding: 50px 40px;
   position: relative;
   z-index: 10;
-  box-shadow: 0 20px 60px rgba(255, 0, 51, 0.15);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 25px 70px rgba(0, 0, 0, 0.55), 0 0 45px rgba(255, 0, 51, 0.12);
 }
 
 .profile-setup-container::before {
@@ -69,10 +72,20 @@
   background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
 }
 
+.profile-setup-container::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 18px;
+  pointer-events: none;
+}
+
 /* Profile Header */
 .profile-header {
   text-align: center;
   margin-bottom: 40px;
+  position: relative;
 }
 
 .profile-icon {
@@ -89,7 +102,7 @@
   font-family: var(--font-heading);
   font-size: 2rem;
   color: var(--color-secondary);
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
   margin-bottom: 15px;
   text-shadow: 0 0 20px rgba(255, 0, 51, 0.3);
 }
@@ -97,7 +110,7 @@
 .profile-subtitle {
   font-family: var(--font-body);
   font-size: 1rem;
-  color: var(--color-text-muted);
+  color: rgba(255, 255, 255, 0.7);
   line-height: 1.6;
   margin-bottom: 30px;
 }
@@ -109,6 +122,10 @@
   justify-content: center;
   gap: 10px;
   margin-top: 30px;
+  padding: 12px 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .progress-step {
@@ -189,24 +206,27 @@
   color: var(--color-text-muted);
   letter-spacing: 0.05em;
   text-transform: uppercase;
+  font-weight: 600;
 }
 
 .form-input {
   width: 100%;
   padding: 15px 20px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   color: var(--color-text);
   font-family: var(--font-body);
   font-size: 1rem;
   transition: all 0.3s ease;
   outline: none;
+  border-radius: 12px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
 }
 
 .form-input:focus {
   border-color: var(--color-primary);
-  background: rgba(255, 0, 51, 0.05);
-  box-shadow: 0 0 20px rgba(255, 0, 51, 0.2);
+  background: rgba(255, 0, 51, 0.06);
+  box-shadow: 0 0 0 3px rgba(255, 0, 51, 0.15);
 }
 
 .form-input::placeholder {
@@ -216,6 +236,7 @@
 .form-input.error {
   border-color: #ff3333;
   background: rgba(255, 51, 51, 0.05);
+  box-shadow: 0 0 0 2px rgba(255, 51, 51, 0.2);
 }
 
 .error-message {
@@ -249,7 +270,7 @@ select.form-input option {
 
 .submit-btn {
   padding: 16px 40px;
-  background: var(--color-primary);
+  background: linear-gradient(135deg, #ff0033, #ff4b6e);
   border: none;
   color: var(--color-background);
   font-family: var(--font-heading);
@@ -259,6 +280,7 @@ select.form-input option {
   transition: all 0.3s ease;
   position: relative;
   overflow: hidden;
+  border-radius: 14px;
 }
 
 .submit-btn::before {
@@ -280,7 +302,7 @@ select.form-input option {
 }
 
 .submit-btn:hover {
-  background: #cc0029;
+  background: linear-gradient(135deg, #ff0044, #ff6b86);
   transform: translateY(-2px);
   box-shadow: 0 5px 30px rgba(255, 0, 51, 0.4);
 }

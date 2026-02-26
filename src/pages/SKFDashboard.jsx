@@ -442,33 +442,52 @@ const SKFDashboard = () => {
                   <div className="student-info">
                     <div className="student-avatar">
                       <div className="avatar-placeholder">
-                        {student.name.split(' ').map(n => n[0]).join('')}
+                        <div className="avatar-glow"></div>
+                        <span className="avatar-text">{student.name.split(' ').map(n => n[0]).join('')}</span>
                       </div>
                     </div>
                     <div className="student-details">
                       <div className="detail-row">
-                        <span className="detail-label">Name</span>
-                        <span className="detail-value">{student.name}</span>
+                        <div className="detail-icon">👤</div>
+                        <div className="detail-content">
+                          <span className="detail-label">Name</span>
+                          <span className="detail-value">{student.name}</span>
+                        </div>
                       </div>
                       <div className="detail-row">
-                        <span className="detail-label">Student ID</span>
-                        <span className="detail-value">{student.studentId}</span>
+                        <div className="detail-icon">🎫</div>
+                        <div className="detail-content">
+                          <span className="detail-label">Student ID</span>
+                          <span className="detail-value">{student.studentId}</span>
+                        </div>
                       </div>
                       <div className="detail-row">
-                        <span className="detail-label">Email</span>
-                        <span className="detail-value">{student.email}</span>
+                        <div className="detail-icon">📧</div>
+                        <div className="detail-content">
+                          <span className="detail-label">Email</span>
+                          <span className="detail-value">{student.email}</span>
+                        </div>
                       </div>
                       <div className="detail-row">
-                        <span className="detail-label">Department</span>
-                        <span className="detail-value">{student.department}</span>
+                        <div className="detail-icon">🎓</div>
+                        <div className="detail-content">
+                          <span className="detail-label">Department</span>
+                          <span className="detail-value">{student.department}</span>
+                        </div>
                       </div>
                       <div className="detail-row">
-                        <span className="detail-label">Year</span>
-                        <span className="detail-value">{student.year}</span>
+                        <div className="detail-icon">📅</div>
+                        <div className="detail-content">
+                          <span className="detail-label">Year</span>
+                          <span className="detail-value">{student.year}</span>
+                        </div>
                       </div>
                       <div className="detail-row">
-                        <span className="detail-label">Phone</span>
-                        <span className="detail-value">{student.phone}</span>
+                        <div className="detail-icon">📱</div>
+                        <div className="detail-content">
+                          <span className="detail-label">Phone</span>
+                          <span className="detail-value">{student.phone}</span>
+                        </div>
                       </div>
                     </div>
                   </div>
