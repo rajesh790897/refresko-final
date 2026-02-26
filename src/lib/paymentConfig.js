@@ -1,7 +1,7 @@
 const STORAGE_KEY = 'paymentGatewayConfig'
 
 export const DEFAULT_PAYMENT_CONFIG = {
-  activeOptionId: 'amount-500',
+  activeOptionId: 'amount-600',
   options: [
     {
       id: 'amount-500',
@@ -34,7 +34,7 @@ const sanitizeOption = (option) => {
   const amountNumber = Number(option?.amount)
   const sanitizedAmount = Number.isFinite(amountNumber) && amountNumber > 0
     ? Math.round(amountNumber)
-    : 500
+    : 600
   const includeFoodToggle = typeof option?.includeFood === 'boolean' ? option.includeFood : sanitizedAmount >= 600
   const includeFood = sanitizedAmount === 600 ? true : includeFoodToggle
 

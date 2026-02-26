@@ -9,7 +9,7 @@ const sanitizeFromFallback = (config) => {
   return {
     activeOptionId: config.activeOptionId || config.options[0].id,
     options: config.options.map((option) => {
-      const amount = Number(option.amount) || 500
+      const amount = Number(option.amount) || 600
       return {
         id: String(option.id || `amount-${amount}`),
         amount,
