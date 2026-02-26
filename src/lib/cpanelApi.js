@@ -38,19 +38,35 @@ const request = async (path, { method = 'GET', headers = {}, body, query } = {})
     fetchOptions.headers = headers
   }
 
-  const response = await fetch(buildUrl(path, query), fetchOptions)
+  // Add timeout to prevent hanging requests (10 seconds)
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 10000)
+  fetchOptions.signal = controller.signal
 
-  const payload = await parseJsonSafe(response)
+  try {
+    const response = await fetch(buildUrl(path, query), fetchOptions)
+    clearTimeout(timeoutId)
 
-  if (!response.ok || payload?.success === false) {
-    const message = payload?.message || `Request failed with status ${response.status}`
-    const error = new Error(message)
-    error.status = response.status
-    error.payload = payload
-    throw error
+    const payload = await parseJsonSafe(response)
+
+    if (!response.ok || payload?.success === false) {
+      const message = payload?.message || `Request failed with status ${response.status}`
+      const error = new Error(message)
+      error.status = response.status
+      error.payload = payload
+      throw error
+    }
+
+    return payload
+  } catch (err) {
+    clearTimeout(timeoutId)
+    if (err.name === 'AbortError') {
+      const timeoutError = new Error('Backend API request timed out')
+      timeoutError.code = 'TIMEOUT'
+      throw timeoutError
+    }
+    throw err
   }
-
-  return payload
 }
 
 export const cpanelApi = {

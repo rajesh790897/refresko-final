@@ -131,28 +131,42 @@ const Login = () => {
               throw new Error(response.message)
             }
           } catch (apiError) {
-            console.warn('Backend student lookup failed:', apiError)
+            if (apiError.code === 'TIMEOUT') {
+              console.warn('Backend API timed out, falling back to Supabase:', apiError.message)
+            } else {
+              console.warn('Backend student lookup failed:', apiError)
+            }
           }
         }
 
         if (!data) {
           if (!isSupabaseConfigured || !supabase) {
-            setError('Login service unavailable. Please try again later.')
+            setError('Login service unavailable. Backend API is not responding and Supabase is not configured.')
             setIsLoading(false)
             return
           }
 
-          const { data: supabaseData, error: fetchError } = await supabase
-            .from('students')
-            .select('name, student_code, email, phone, department, year, profile_completed, payment_completion, gate_pass_created, payment_approved, food_included, food_preference')
-            .eq('student_code', studentCode)
-            .maybeSingle()
-
-          if (fetchError) {
-            throw fetchError
+          try {
+            const { data: supabaseData, error: fetchError } = await supabase
+              .from('students')
+              .select('name, student_code, email, phone, department, year, profile_completed, payment_completion, gate_pass_created, payment_approved, food_included, food_preference')
+              .eq('student_code', studentCode)
+              .maybeSingle()
+            
+            if (fetchError) {
+              console.error('Supabase fetch error:', fetchError)
+              setError('Database connection error. Please check your internet connection.')
+              setIsLoading(false)
+              return
+            }
+            
+            data = supabaseData
+          } catch (supabaseError) {
+            console.error('Supabase connection failed:', supabaseError)
+            setError('Unable to connect to the database. Please check your internet connection and try again.')
+            setIsLoading(false)
+            return
           }
-
-          data = supabaseData
         }
 
         if (!data) {
