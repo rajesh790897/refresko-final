@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { cpanelApi } from '../../lib/cpanelApi'
 import { supabase, isSupabaseConfigured } from '../../lib/supabaseClient'
+import { cpanelApi } from '../../lib/cpanelApi'
 import jsPDF from 'jspdf'
 import 'jspdf-autotable'
 import './Analytics.css'
@@ -138,28 +138,8 @@ const Analytics = () => {
       let studentsData = []
       let paymentsData = []
 
-      // Try Supabase first
-      if (isSupabaseConfigured && supabase) {
-        try {
-          const [studentsFromDB, paymentsFromDB] = await Promise.all([
-            fetchAllSupabaseRows('students'),
-            fetchAllSupabaseRows('payments')
-          ])
-
-          studentsData = studentsFromDB
-            .map(normalizeStudentRecord)
-            .filter((student) => student.student_code)
-
-          paymentsData = paymentsFromDB
-            .map(normalizePaymentRecord)
-            .filter((payment) => payment.student_code)
-        } catch (supabaseError) {
-          console.error('Supabase error:', supabaseError)
-        }
-      }
-
-      // Fallback to cPanel API if Supabase fails or not configured
-      if (studentsData.length === 0 && cpanelApi.isConfigured()) {
+      // Prefer MySQL API for payments/receipts when configured
+      if (cpanelApi.isConfigured()) {
         try {
           const paymentsFromApi = await fetchAllCpanelPayments()
           paymentsData = paymentsFromApi
@@ -182,6 +162,26 @@ const Analytics = () => {
           studentsData = Array.from(studentMap.values())
         } catch (apiError) {
           console.warn('cPanel API failed:', apiError)
+        }
+      }
+
+      // Fallback to Supabase if API is unavailable or returned no data
+      if (paymentsData.length === 0 && isSupabaseConfigured && supabase) {
+        try {
+          const [studentsFromDB, paymentsFromDB] = await Promise.all([
+            fetchAllSupabaseRows('students'),
+            fetchAllSupabaseRows('payments')
+          ])
+
+          studentsData = studentsFromDB
+            .map(normalizeStudentRecord)
+            .filter((student) => student.student_code)
+
+          paymentsData = paymentsFromDB
+            .map(normalizePaymentRecord)
+            .filter((payment) => payment.student_code)
+        } catch (supabaseError) {
+          console.error('Supabase error:', supabaseError)
         }
       }
 

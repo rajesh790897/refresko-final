@@ -5,8 +5,6 @@ import QRCode from 'qrcode'
 import imageCompression from 'browser-image-compression'
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient'
 import { getActivePaymentOption, loadPaymentConfig } from '../lib/paymentConfig'
-import { loadPaymentConfigWithApi } from '../lib/paymentConfigApi'
-import { cpanelApi } from '../lib/cpanelApi'
 import './PaymentGateway.css'
 
 const PaymentGateway = () => {
@@ -66,10 +64,10 @@ const PaymentGateway = () => {
   useEffect(() => {
     document.body.classList.add('system-cursor')
     
-    // Load payment config from database (cross-device sync)
+    // Load payment config from localStorage (API disabled)
     const loadConfig = async () => {
       try {
-        const config = await loadPaymentConfigWithApi()
+        const config = loadPaymentConfig()
         setPaymentConfig(config)
         const currentOption = getActivePaymentOption(config)
         const requiresFoodPreference = Boolean(currentOption?.includeFood)
@@ -92,7 +90,7 @@ const PaymentGateway = () => {
         }
         setFoodPreference(requiresFoodPreference ? normalizedSavedFood : 'NOT_INCLUDED')
       } catch (error) {
-        console.warn('Failed to load config from API:', error)
+        console.warn('Failed to load config:', error)
         const configFromStorage = loadPaymentConfig()
         setPaymentConfig(configFromStorage)
       }
@@ -288,61 +286,7 @@ const PaymentGateway = () => {
     const txnId = `TXN${Date.now()}`
     const paymentId = `PAY${Date.now()}`
 
-    let apiSubmissionSucceeded = false
-
-    if (cpanelApi.isConfigured()) {
-      try {
-        const formData = new FormData()
-        formData.append('payment_id', paymentId)
-        formData.append('transaction_id', txnId)
-        formData.append('utr_no', normalizedUtr)
-        formData.append('student_code', currentStudentId)
-        formData.append('student_name', studentProfile.name || 'N/A')
-        formData.append('email', studentProfile.email || '')
-        formData.append('department', studentProfile.department || '')
-        formData.append('year', studentProfile.year || '')
-        formData.append('amount', String(payableAmount))
-        formData.append('payment_method', 'UPI')
-        formData.append('food_included', isFoodIncluded ? '1' : '0')
-        formData.append('food_preference', effectiveFoodPreference || '')
-
-        // Debug logging
-        console.log('Payment screenshot before append:', {
-          exists: !!paymentScreenshot,
-          isFile: paymentScreenshot instanceof File,
-          type: paymentScreenshot?.type,
-          size: paymentScreenshot?.size,
-          name: paymentScreenshot?.name
-        })
-
-        if (paymentScreenshot && paymentScreenshot instanceof File) {
-          formData.append('screenshot', paymentScreenshot, paymentScreenshotName || 'payment-screenshot.jpg')
-          console.log('✅ Screenshot appended to FormData')
-        } else {
-          console.error('❌ Screenshot NOT appended - not a valid File object')
-        }
-
-        // Log all FormData entries
-        console.log('FormData entries:')
-        for (let pair of formData.entries()) {
-          if (pair[1] instanceof File) {
-            console.log(pair[0], ':', 'File:', pair[1].name, pair[1].size, 'bytes')
-          } else {
-            console.log(pair[0], ':', pair[1])
-          }
-        }
-
-        await cpanelApi.submitPayment(formData)
-        console.log('✅ Payment successfully submitted to database')
-        apiSubmissionSucceeded = true
-      } catch (apiError) {
-        console.error('Payment submission to database failed:', apiError)
-        const errorMessage = apiError.message || apiError.toString()
-        setFormError(`Payment submission failed: ${errorMessage}. Your payment data will be saved locally, but may not appear cross devices until the issue is resolved. Please contact support if this persists.`)
-        setPaymentStatus('idle')
-        return
-      }
-    }
+    console.info('Backend API not configured - using localStorage only')
     
     // Simulate payment processing
     setTimeout(async () => {

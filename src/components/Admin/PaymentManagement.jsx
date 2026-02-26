@@ -53,16 +53,10 @@ const normalizePayments = (records) => {
   return records.map((payment, index) => {
     const foodIncluded = resolveFoodIncluded(payment)
     const rawFoodPreference = payment.foodPreference ?? payment.food_preference ?? payment.paymentFoodPreference ?? (foodIncluded ? localStorage.getItem('paymentFoodPreference') : null)
-
-    // Build full screenshot URL from API response
+    // Build full screenshot URL from payment data
     let screenshotUrl = payment.screenshot || payment.paymentScreenshot || null
     
-    // If backend returned screenshot_path, it's already converted to full URL
-    // Otherwise check localStorage for base64 data
-    if (!screenshotUrl && payment.screenshot_path) {
-      const apiBase = cpanelApi.baseUrl || 'https://api-refresko.skf.edu.in'
-      screenshotUrl = apiBase + payment.screenshot_path
-    }
+    // Prefer API-provided screenshot URLs when available
 
     return {
       id: payment.payment_id || payment.id || `PAY${Date.now()}_${index + 1}`,
@@ -202,33 +196,16 @@ const loadPaymentsWithApi = async () => {
     try {
       const allPayments = []
       let offset = 0
-      let pageCount = 0
-      const maxPages = Math.ceil(MAX_PAYMENT_RECORDS / API_FETCH_BATCH_SIZE)
 
-      while (pageCount < maxPages) {
+      while (allPayments.length < MAX_PAYMENT_RECORDS) {
         const response = await cpanelApi.listPayments({
           limit: API_FETCH_BATCH_SIZE,
           offset
         })
         const chunk = Array.isArray(response?.payments) ? response.payments : []
-
         allPayments.push(...chunk)
-        pageCount += 1
 
-        if (allPayments.length >= MAX_PAYMENT_RECORDS) {
-          break
-        }
-
-        const total = Number(response?.total)
-        if (Number.isFinite(total) && allPayments.length >= Math.min(total, MAX_PAYMENT_RECORDS)) {
-          break
-        }
-
-        if (response?.has_more !== true && chunk.length < API_FETCH_BATCH_SIZE) {
-          break
-        }
-
-        if (chunk.length === 0) {
+        if (chunk.length < API_FETCH_BATCH_SIZE || response?.has_more !== true) {
           break
         }
 
@@ -236,17 +213,22 @@ const loadPaymentsWithApi = async () => {
       }
 
       const normalized = normalizePayments(allPayments.slice(0, MAX_PAYMENT_RECORDS))
-
-      console.log(`✅ Loaded ${normalized.length} payments from database`)
+      console.log(`✅ Loaded ${normalized.length} payments from MySQL API`)
       return normalized
     } catch (error) {
-      console.error('Failed to load payments from database:', error)
-      return []
+      console.warn('Failed to load payments from MySQL API:', error)
     }
   }
 
-  console.warn('⚠️ cPanel API not configured - cannot load payments')
-  return []
+  try {
+    const savedPayments = localStorage.getItem('paymentSubmissions')
+    const allPayments = savedPayments ? JSON.parse(savedPayments) : []
+    const normalized = normalizePayments(Array.isArray(allPayments) ? allPayments.slice(0, MAX_PAYMENT_RECORDS) : [])
+    return normalized
+  } catch (error) {
+    console.warn('Failed to load payments from localStorage:', error)
+    return []
+  }
 }
 
 const PaymentManagement = () => {
@@ -303,163 +285,64 @@ const PaymentManagement = () => {
     setSelectedPayment(payment)
   }
 
+  const handleDownloadReceipt = (payment) => {
+    // Implement receipt download logic
+    console.log('Downloading receipt for:', payment.id)
+  }
+
   const handleUpdatePaymentStatus = async (paymentId, status) => {
-    if (cpanelApi.isConfigured()) {
-      try {
-        // Find payment to get student_code before API call
-        const targetPayment = payments.find(p => p.id === paymentId)
-        const studentCode = (targetPayment?.studentCode || '').trim().toUpperCase()
-
-        console.log('Updating payment:', {
-          paymentId,
-          status,
-          studentCode,
-          targetPayment: targetPayment ? {
-            id: targetPayment.id,
-            paymentId: targetPayment.paymentId,
-            studentCode: targetPayment.studentCode
-          } : null
-        })
-
-        // Update via cPanel API
-        const apiResponse = await cpanelApi.updatePaymentDecision({ paymentId, decision: status })
-        console.log('API Response:', apiResponse)
-
-        // Sync to Supabase if configured
-        if (isSupabaseConfigured && supabase && studentCode) {
-          try {
-            const supabaseResult = await supabase
-              .from('students')
-              .update({
-                payment_completion: status === 'declined' ? false : true,
-                gate_pass_created: status === 'approved' ? true : false,
-                payment_approved: status === 'approved' ? 'approved' : 'declined'
-              })
-              .eq('student_code', studentCode)
-            console.log('Supabase synced successfully for:', studentCode, supabaseResult)
-          } catch (supabaseError) {
-            console.error('Unable to sync admin payment decision to Supabase:', supabaseError)
-          }
-        }
-
-        // Refresh payment list from API
-        const refreshed = await loadPaymentsWithApi()
-        setPayments(refreshed)
-
-        // Update localStorage to reflect status change for student dashboard
-        try {
-          const savedPayments = localStorage.getItem('paymentSubmissions')
-          const parsedPayments = savedPayments ? JSON.parse(savedPayments) : []
-          const nextStatus = status === 'approved' ? 'completed' : 'declined'
-
-          const updatedPayments = Array.isArray(parsedPayments)
-            ? parsedPayments.map((payment) => {
-                const currentPaymentId = payment.payment_id || payment.id || ''
-                const currentStudentCode = (payment.studentCode || payment.student_code || '').trim().toUpperCase()
-                
-                // Match by payment_id or student_code
-                if (currentPaymentId === paymentId || currentStudentCode === studentCode) {
-                  return {
-                    ...payment,
-                    status: nextStatus,
-                    payment_approved: status,
-                    paymentApproved: status,
-                    reviewedAt: new Date().toISOString()
-                  }
-                }
-                return payment
-              })
-            : []
-
-          if (updatedPayments.length > 0) {
-            localStorage.setItem('paymentSubmissions', JSON.stringify(updatedPayments))
-            window.dispatchEvent(new Event('paymentSubmissionsUpdated'))
-          }
-        } catch (localStorageError) {
-          console.warn('Failed to update localStorage:', localStorageError)
-        }
-
-        // Update modal state
-        setSelectedPayment((previous) => (
-          previous && previous.id === paymentId
-            ? {
-                ...previous,
-                status: status === 'approved' ? 'completed' : 'declined',
-                paymentApproved: status
-              }
-            : previous
-        ))
-        return
-      } catch (apiError) {
-        console.warn('API payment decision update failed, using localStorage:', apiError)
-      }
-    }
     try {
-      const savedPayments = localStorage.getItem('paymentSubmissions')
-      const parsedPayments = savedPayments ? JSON.parse(savedPayments) : []
       const nextStatus = status === 'approved' ? 'completed' : status
 
-      const updatedPayments = Array.isArray(parsedPayments)
-        ? parsedPayments.map((payment) => {
-            const currentId = payment.id || ''
-            if (currentId !== paymentId) return payment
+      if (cpanelApi.isConfigured()) {
+        await cpanelApi.updatePaymentDecision({
+          paymentId,
+          decision: status
+        })
 
-            return {
-              ...payment,
-              status: nextStatus,
-              payment_approved: status === 'approved' ? 'approved' : 'declined',
-              reviewedAt: new Date().toISOString()
-            }
-          })
-        : []
+        const refreshed = await loadPaymentsWithApi()
+        setPayments(refreshed)
+      } else {
+        const savedPayments = localStorage.getItem('paymentSubmissions')
+        const parsedPayments = savedPayments ? JSON.parse(savedPayments) : []
 
-      localStorage.setItem('paymentSubmissions', JSON.stringify(updatedPayments))
-      window.dispatchEvent(new Event('paymentSubmissionsUpdated'))
+        const updatedPayments = Array.isArray(parsedPayments)
+          ? parsedPayments.map((payment) => {
+              const currentId = payment.id || ''
+              if (currentId !== paymentId) return payment
 
-      setPayments(normalizePayments(updatedPayments))
-      const updatedPayment = updatedPayments.find((payment) => payment.id === paymentId)
+              return {
+                ...payment,
+                status: nextStatus,
+                payment_approved: status === 'approved' ? 'approved' : 'declined',
+                reviewedAt: new Date().toISOString()
+              }
+            })
+          : []
 
-      if (updatedPayment) {
-        const updatedProfileRaw = localStorage.getItem('studentProfile')
-        if (updatedProfileRaw) {
-          try {
-            const updatedProfile = JSON.parse(updatedProfileRaw)
-            const sameStudent =
-              updatedProfile.studentId === (updatedPayment.studentCode || updatedPayment.studentId) ||
-              updatedProfile.email === updatedPayment.email
+        localStorage.setItem('paymentSubmissions', JSON.stringify(updatedPayments))
+        window.dispatchEvent(new Event('paymentSubmissionsUpdated'))
+        setPayments(normalizePayments(updatedPayments))
+      }
 
-            if (sameStudent) {
-              localStorage.setItem(
-                'studentProfile',
-                JSON.stringify({
-                  ...updatedProfile,
-                  payment_completion: status === 'declined' ? false : true,
-                  gate_pass_created: status === 'approved',
-                  payment_approved: status === 'approved' ? 'approved' : 'declined'
-                })
-              )
-            }
-          } catch {
-            // ignore malformed profile cache
-          }
-        }
+      // Find student code for Supabase sync
+      const targetPayment = payments.find(p => p.id === paymentId)
+      const studentCode = (targetPayment?.studentCode || '').trim().toUpperCase()
 
-        if (isSupabaseConfigured && supabase) {
-          try {
-            const studentCode = (updatedPayment.studentCode || updatedPayment.studentId || '').trim().toUpperCase()
-            if (studentCode) {
-              await supabase
-                .from('students')
-                .update({
-                  payment_completion: status === 'declined' ? false : true,
-                  gate_pass_created: status === 'approved',
-                  payment_approved: status === 'approved' ? 'approved' : 'declined'
-                })
-                .eq('student_code', studentCode)
-            }
-          } catch (error) {
-            console.error('Unable to sync admin payment decision to Supabase:', error)
-          }
+      // Sync to Supabase if configured
+      if (isSupabaseConfigured && supabase && studentCode) {
+        try {
+          await supabase
+            .from('students')
+            .update({
+              payment_completion: status === 'declined' ? false : true,
+              gate_pass_created: status === 'approved' ? true : false,
+              payment_approved: status === 'approved' ? 'approved' : 'declined'
+            })
+            .eq('student_code', studentCode)
+          console.log('Supabase synced successfully for:', studentCode)
+        } catch (supabaseError) {
+          console.error('Unable to sync admin payment decision to Supabase:', supabaseError)
         }
       }
 
@@ -472,86 +355,29 @@ const PaymentManagement = () => {
             }
           : previous
       ))
-    } catch {
-      // ignore malformed localStorage payloads
+    } catch (error) {
+      console.error('Failed to update payment status', error)
     }
-  }
-
-  const handleDownloadReceipt = (payment) => {
-    // Implement receipt download logic
-    console.log('Downloading receipt for:', payment.id)
-  }
-
-  const getPaymentScreenshotSource = (payment) => {
-    if (!payment) return ''
-
-    if (typeof payment.screenshot === 'string' && payment.screenshot.trim()) {
-      return payment.screenshot
-    }
-
-    const keys = [payment.utrNo, payment.transactionId, payment.id].filter(Boolean)
-    for (const key of keys) {
-      const storedScreenshot = localStorage.getItem(`paymentScreenshot:${key}`)
-      if (storedScreenshot) {
-        return storedScreenshot
-      }
-    }
-
-    return ''
-  }
-
-  const handleViewUploadedImage = (payment) => {
-    const screenshotSource = getPaymentScreenshotSource(payment)
-    if (!screenshotSource) {
-      window.alert('No uploaded payment screenshot found for this transaction.')
-      return
-    }
-
-    setSelectedScreenshot({
-      src: screenshotSource,
-      name: payment?.screenshotName || 'Payment Screenshot',
-      paymentId: payment?.id || ''
-    })
-  }
-
-  const handleExportCsv = () => {
-    if (payments.length === 0) {
-      return
-    }
-
-    const csvContent = toCsvContent(payments)
-    const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-
-    link.href = url
-    link.setAttribute('download', `payments_receipts_export_${timestamp}.csv`)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
   }
 
   return (
     <div className="payment-management">
-      {/* Summary Cards */}
       <div className="summary-cards">
         <motion.div
           className="summary-card"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
+          transition={{ duration: 0.4 }}
         >
           <div className="card-icon revenue">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="12" y1="1" x2="12" y2="23"/>
-              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+              <path d="M12 1v22" />
+              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7H14a3.5 3.5 0 0 1 0 7H6" />
             </svg>
           </div>
           <div className="card-content">
             <h3>Total Revenue</h3>
-            <p className="card-value">₹{totalRevenue.toLocaleString()}</p>
+            <p className="card-value">₹{totalRevenue}</p>
             <span className="card-label">Completed Payments</span>
           </div>
         </motion.div>
@@ -560,17 +386,17 @@ const PaymentManagement = () => {
           className="summary-card"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.1 }}
+          transition={{ duration: 0.4, delay: 0.1 }}
         >
           <div className="card-icon pending">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10"/>
-              <polyline points="12 6 12 12 16 14"/>
+              <circle cx="12" cy="12" r="10" />
+              <path d="M12 6v6l4 2" />
             </svg>
           </div>
           <div className="card-content">
             <h3>Pending Amount</h3>
-            <p className="card-value">₹{pendingAmount.toLocaleString()}</p>
+            <p className="card-value">₹{pendingAmount}</p>
             <span className="card-label">Awaiting Confirmation</span>
           </div>
         </motion.div>
@@ -579,14 +405,14 @@ const PaymentManagement = () => {
           className="summary-card"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
+          transition={{ duration: 0.4, delay: 0.2 }}
         >
           <div className="card-icon total">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-              <circle cx="8.5" cy="7" r="4"/>
-              <line x1="20" y1="8" x2="20" y2="14"/>
-              <line x1="23" y1="11" x2="17" y2="11"/>
+              <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="8.5" cy="7" r="4" />
+              <path d="M20 8v6" />
+              <line x1="23" y1="11" x2="17" y2="11" />
             </svg>
           </div>
           <div className="card-content">

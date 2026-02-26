@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient'
-import { cpanelApi } from '../lib/cpanelApi'
 import './Login.css'
 
 const normalizePhone = (value) => value.replace(/\D/g, '')
@@ -67,26 +66,7 @@ const Login = () => {
 
     // Keep a small delay for UI consistency
     setTimeout(async () => {
-      if (isAdminLoginMode && cpanelApi.isConfigured()) {
-        try {
-          const response = await cpanelApi.adminLogin({ email: formData.email, password: formData.password })
-
-          if (response?.success && response?.admin) {
-            localStorage.removeItem('isAuthenticated')
-            localStorage.setItem('adminAuthenticated', 'true')
-            localStorage.setItem('adminLoginEmail', response.admin.email)
-            navigate('/admin')
-            return
-          }
-
-          setError('Invalid credentials. Please try again.')
-          setIsLoading(false)
-          return
-        } catch (apiError) {
-          console.warn('cPanel admin login failed, trying localStorage:', apiError)
-        }
-      }
-
+      // Admin login - check localStorage only (API disabled)
       let adminAccounts = []
       try {
         const savedAdmins = localStorage.getItem('adminAccounts')
@@ -116,24 +96,39 @@ const Login = () => {
         return
       }
 
-      if (!isSupabaseConfigured || !supabase) {
-        setError('Supabase is not configured. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.')
-        setIsLoading(false)
-        return
-      }
-
       try {
         const studentCode = formData.email.trim().toUpperCase()
         const enteredPhone = normalizePhone(formData.password)
 
-        const { data, error: fetchError } = await supabase
-          .from('students')
-          .select('name, student_code, email, phone, department, year, profile_completed, payment_completion, gate_pass_created, payment_approved, food_included, food_preference')
-          .eq('student_code', studentCode)
-          .maybeSingle()
+        let data = null
 
-        if (fetchError) {
-          throw fetchError
+        // Use Supabase only (backend API disabled)
+        if (!isSupabaseConfigured || !supabase) {
+          setError('Login service unavailable. Supabase is not configured.')
+          setIsLoading(false)
+          return
+        }
+
+        try {
+          const { data: supabaseData, error: fetchError } = await supabase
+            .from('students')
+            .select('name, student_code, email, phone, department, year, profile_completed, payment_completion, gate_pass_created, payment_approved, food_included, food_preference')
+            .eq('student_code', studentCode)
+            .maybeSingle()
+          
+          if (fetchError) {
+            console.error('Supabase fetch error:', fetchError)
+            setError('Database connection error. Please check your internet connection.')
+            setIsLoading(false)
+            return
+          }
+          
+          data = supabaseData
+        } catch (supabaseError) {
+          console.error('Supabase connection failed:', supabaseError)
+          setError('Unable to connect to the database. Please check your internet connection and try again.')
+          setIsLoading(false)
+          return
         }
 
         if (!data) {
@@ -178,8 +173,30 @@ const Login = () => {
         localStorage.removeItem('profileCompleted')
         navigate('/profile-setup')
       } catch (err) {
-        console.error('Student login verification failed:', err)
-        setError('Unable to verify student credentials right now. Please try again.')
+          console.error('Student login verification failed:', {
+            message: err?.message,
+            code: err?.code,
+            status: err?.status,
+            time: new Date().toISOString()
+          })
+        
+          // Provide more specific error messages
+          let errorMsg = 'Unable to verify credentials. Please try again.'
+          const message = String(err?.message || '').toLowerCase()
+          const status = Number(err?.status || 0)
+          const isNetworkError = err instanceof TypeError || message.includes('failed to fetch') || message.includes('networkerror')
+
+          if (isNetworkError) {
+            errorMsg = 'Network error. Check your connection and retry.'
+          } else if (message.includes('timeout')) {
+            errorMsg = 'Request timeout. Please try again.'
+          } else if (status === 401 || status === 403) {
+            errorMsg = 'Authentication failed. Contact support if this persists.'
+          } else if (status >= 500) {
+            errorMsg = 'Login service is temporarily unavailable. Please try again shortly.'
+          }
+        
+          setError(errorMsg)
         setIsLoading(false)
       }
     }, 800)
