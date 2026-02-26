@@ -285,111 +285,6 @@ const PaymentManagement = () => {
     setSelectedPayment(payment)
   }
 
-  const handleUpdatePaymentStatus = async (paymentId, status) => {
-    try {
-      const savedPayments = localStorage.getItem('paymentSubmissions')
-      const parsedPayments = savedPayments ? JSON.parse(savedPayments) : []
-      const nextStatus = status === 'approved' ? 'completed' : status
-
-      const updatedPayments = Array.isArray(parsedPayments)
-        ? parsedPayments.map((payment) => {
-            const currentId = payment.id || ''
-            if (currentId !== paymentId) return payment
-
-            return {
-              ...payment,
-              status: nextStatus,
-              payment_approved: status === 'approved' ? 'approved' : 'declined',
-              reviewedAt: new Date().toISOString()
-            }
-          })
-        : []
-
-      // Find student code for Supabase sync
-      const targetPayment = payments.find(p => p.id === paymentId)
-      const studentCode = (targetPayment?.studentCode || '').trim().toUpperCase()
-
-      // Sync to Supabase if configured
-      if (isSupabaseConfigured && supabase && studentCode) {
-        try {
-          await supabase
-            .from('students')
-            .update({
-              payment_completion: status === 'declined' ? false : true,
-              gate_pass_created: status === 'approved' ? true : false,
-              payment_approved: status === 'approved' ? 'approved' : 'declined'
-            })
-            .eq('student_code', studentCode)
-          console.log('Supabase synced successfully for:', studentCode)
-        } catch (supabaseError) {
-          console.error('Unable to sync admin payment decision to Supabase:', supabaseError)
-        }
-      }
-
-      localStorage.setItem('paymentSubmissions', JSON.stringify(updatedPayments))
-      window.dispatchEvent(new Event('paymentSubmissionsUpdated'))
-
-      setPayments(normalizePayments(updatedPayments))
-      const updatedPayment = updatedPayments.find((payment) => payment.id === paymentId)
-
-      if (updatedPayment) {
-        const updatedProfileRaw = localStorage.getItem('studentProfile')
-        if (updatedProfileRaw) {
-          try {
-            const updatedProfile = JSON.parse(updatedProfileRaw)
-            const sameStudent =
-              updatedProfile.studentId === (updatedPayment.studentCode || updatedPayment.studentId) ||
-              updatedProfile.email === updatedPayment.email
-
-            if (sameStudent) {
-              localStorage.setItem(
-                'studentProfile',
-                JSON.stringify({
-                  ...updatedProfile,
-                  payment_completion: status === 'declined' ? false : true,
-                  gate_pass_created: status === 'approved',
-                  payment_approved: status === 'approved' ? 'approved' : 'declined'
-                })
-              )
-            }
-          } catch {
-            // ignore malformed profile cache
-          }
-        }
-
-        if (isSupabaseConfigured && supabase) {
-          try {
-            const studentCode = (updatedPayment.studentCode || updatedPayment.studentId || '').trim().toUpperCase()
-            if (studentCode) {
-              await supabase
-                .from('students')
-                .update({
-                  payment_completion: status === 'declined' ? false : true,
-                  gate_pass_created: status === 'approved',
-                  payment_approved: status === 'approved' ? 'approved' : 'declined'
-                })
-                .eq('student_code', studentCode)
-            }
-          } catch (error) {
-            console.error('Unable to sync admin payment decision to Supabase:', error)
-          }
-        }
-      }
-
-      setSelectedPayment((previous) => (
-        previous && previous.id === paymentId
-          ? {
-              ...previous,
-              status: nextStatus,
-              paymentApproved: status === 'approved' ? 'approved' : 'declined'
-            }
-          : previous
-      ))
-    } catch {
-      // ignore malformed localStorage payloads
-    }
-  }
-
   const handleDownloadReceipt = (payment) => {
     // Implement receipt download logic
     console.log('Downloading receipt for:', payment.id)
@@ -464,7 +359,60 @@ const PaymentManagement = () => {
       console.error('Failed to update payment status', error)
     }
   }
-              <line x1="23" y1="11" x2="17" y2="11"/>
+
+  return (
+    <div className="payment-management">
+      <div className="summary-cards">
+        <motion.div
+          className="summary-card"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+        >
+          <div className="card-icon revenue">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 1v22" />
+              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7H14a3.5 3.5 0 0 1 0 7H6" />
+            </svg>
+          </div>
+          <div className="card-content">
+            <h3>Total Revenue</h3>
+            <p className="card-value">₹{totalRevenue}</p>
+            <span className="card-label">Completed Payments</span>
+          </div>
+        </motion.div>
+
+        <motion.div
+          className="summary-card"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.1 }}
+        >
+          <div className="card-icon pending">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M12 6v6l4 2" />
+            </svg>
+          </div>
+          <div className="card-content">
+            <h3>Pending Amount</h3>
+            <p className="card-value">₹{pendingAmount}</p>
+            <span className="card-label">Awaiting Confirmation</span>
+          </div>
+        </motion.div>
+
+        <motion.div
+          className="summary-card"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.2 }}
+        >
+          <div className="card-icon total">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="8.5" cy="7" r="4" />
+              <path d="M20 8v6" />
+              <line x1="23" y1="11" x2="17" y2="11" />
             </svg>
           </div>
           <div className="card-content">
