@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient'
+import { cpanelApi } from '../lib/cpanelApi'
 import './Login.css'
 
 const normalizePhone = (value) => value.replace(/\D/g, '')
@@ -66,7 +67,26 @@ const Login = () => {
 
     // Keep a small delay for UI consistency
     setTimeout(async () => {
-      // Admin login - check localStorage only (API disabled)
+      if (isAdminLoginMode && cpanelApi.isConfigured()) {
+        try {
+          const response = await cpanelApi.adminLogin({ email: formData.email, password: formData.password })
+
+          if (response?.success && response?.admin) {
+            localStorage.removeItem('isAuthenticated')
+            localStorage.setItem('adminAuthenticated', 'true')
+            localStorage.setItem('adminLoginEmail', response.admin.email)
+            navigate('/admin')
+            return
+          }
+
+          setError('Invalid credentials. Please try again.')
+          setIsLoading(false)
+          return
+        } catch (apiError) {
+          console.warn('cPanel admin login failed, trying localStorage:', apiError)
+        }
+      }
+
       let adminAccounts = []
       try {
         const savedAdmins = localStorage.getItem('adminAccounts')
@@ -96,39 +116,24 @@ const Login = () => {
         return
       }
 
+      if (!isSupabaseConfigured || !supabase) {
+        setError('Supabase is not configured. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.')
+        setIsLoading(false)
+        return
+      }
+
       try {
         const studentCode = formData.email.trim().toUpperCase()
         const enteredPhone = normalizePhone(formData.password)
 
-        let data = null
+        const { data, error: fetchError } = await supabase
+          .from('students')
+          .select('name, student_code, email, phone, department, year, profile_completed, payment_completion, gate_pass_created, payment_approved, food_included, food_preference')
+          .eq('student_code', studentCode)
+          .maybeSingle()
 
-        // Use Supabase only (backend API disabled)
-        if (!isSupabaseConfigured || !supabase) {
-          setError('Login service unavailable. Supabase is not configured.')
-          setIsLoading(false)
-          return
-        }
-
-        try {
-          const { data: supabaseData, error: fetchError } = await supabase
-            .from('students')
-            .select('name, student_code, email, phone, department, year, profile_completed, payment_completion, gate_pass_created, payment_approved, food_included, food_preference')
-            .eq('student_code', studentCode)
-            .maybeSingle()
-          
-          if (fetchError) {
-            console.error('Supabase fetch error:', fetchError)
-            setError('Database connection error. Please check your internet connection.')
-            setIsLoading(false)
-            return
-          }
-          
-          data = supabaseData
-        } catch (supabaseError) {
-          console.error('Supabase connection failed:', supabaseError)
-          setError('Unable to connect to the database. Please check your internet connection and try again.')
-          setIsLoading(false)
-          return
+        if (fetchError) {
+          throw fetchError
         }
 
         if (!data) {

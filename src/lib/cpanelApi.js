@@ -38,35 +38,19 @@ const request = async (path, { method = 'GET', headers = {}, body, query } = {})
     fetchOptions.headers = headers
   }
 
-  // Add timeout to prevent hanging requests (10 seconds)
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 10000)
-  fetchOptions.signal = controller.signal
+  const response = await fetch(buildUrl(path, query), fetchOptions)
 
-  try {
-    const response = await fetch(buildUrl(path, query), fetchOptions)
-    clearTimeout(timeoutId)
+  const payload = await parseJsonSafe(response)
 
-    const payload = await parseJsonSafe(response)
-
-    if (!response.ok || payload?.success === false) {
-      const message = payload?.message || `Request failed with status ${response.status}`
-      const error = new Error(message)
-      error.status = response.status
-      error.payload = payload
-      throw error
-    }
-
-    return payload
-  } catch (err) {
-    clearTimeout(timeoutId)
-    if (err.name === 'AbortError') {
-      const timeoutError = new Error('Backend API request timed out')
-      timeoutError.code = 'TIMEOUT'
-      throw timeoutError
-    }
-    throw err
+  if (!response.ok || payload?.success === false) {
+    const message = payload?.message || `Request failed with status ${response.status}`
+    const error = new Error(message)
+    error.status = response.status
+    error.payload = payload
+    throw error
   }
+
+  return payload
 }
 
 export const cpanelApi = {
@@ -197,12 +181,6 @@ export const cpanelApi = {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({ admin_id: adminId })
-    })
-  },
-
-  getStudent: async (studentCode) => {
-    return request('/students/get', {
-      query: { student_code: studentCode }
     })
   }
 }

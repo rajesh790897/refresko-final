@@ -10,12 +10,6 @@ return [
         'charset' => 'utf8mb4',
     ],
 
-    'supabase' => [
-        'url' => getenv('SUPABASE_URL') ?: '',
-        'service_key' => getenv('SUPABASE_SERVICE_ROLE_KEY') ?: '',
-        'anon_key' => getenv('SUPABASE_ANON_KEY') ?: '',
-    ],
-
     'cors_allowed_origins' => [
         'https://refresko.skf.edu.in',
         'https://api-refresko.skf.edu.in',

@@ -3,8 +3,9 @@ import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import QRCode from 'qrcode'
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient'
-
+import { cpanelApi } from '../lib/cpanelApi'
 import { getActivePaymentOption, loadPaymentConfig } from '../lib/paymentConfig'
+import { loadPaymentConfigWithApi } from '../lib/paymentConfigApi'
 import './SKFDashboard.css'
 
 // Default data structure
@@ -56,7 +57,33 @@ const SKFDashboard = () => {
         }
       }
 
-      // Use localStorage as primary source (no backend API calls)
+      // Try cPanel API first
+      if (cpanelApi.isConfigured()) {
+        try {
+          const response = await cpanelApi.listPayments()
+          if (response.success && Array.isArray(response.payments)) {
+            const studentPayment = response.payments
+              .filter(p => (p.student_code || '').trim().toUpperCase() === studentCode.trim().toUpperCase())
+              .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))[0]
+            
+            if (studentPayment) {
+              return {
+                status: studentPayment.status,
+                payment_approved: studentRecord?.payment_approved || studentPayment.payment_approved,
+                payment_completion: Boolean(studentRecord?.payment_completion),
+                amount: studentPayment.amount,
+                utrNo: studentPayment.utr_no,
+                transactionId: studentPayment.utr_no,
+                date: studentPayment.created_at
+              }
+            }
+          }
+        } catch (apiError) {
+          console.warn('API fetch failed, trying Supabase:', apiError)
+        }
+      }
+
+      // Try Supabase as fallback
       if (isSupabaseConfigured && supabase) {
         if (studentRecord) {
           return {
@@ -68,7 +95,7 @@ const SKFDashboard = () => {
         }
       }
     } catch (error) {
-      console.warn('Failed to fetch payment status from database:', error)
+      console.error('Failed to fetch payment status from database:', error)
     }
     return null
   }
@@ -156,8 +183,17 @@ const SKFDashboard = () => {
   useEffect(() => {
     document.body.classList.add('system-cursor')
     
-    // Use localStorage config (API disabled due to CORS)
-    setPaymentConfig(loadPaymentConfig())
+    // Load payment config from database first (cross-device sync)
+    const loadConfig = async () => {
+      try {
+        const config = await loadPaymentConfigWithApi()
+        setPaymentConfig(config)
+      } catch (error) {
+        console.warn('Failed to load payment config from API, using localStorage:', error)
+        setPaymentConfig(loadPaymentConfig())
+      }
+    }
+    loadConfig()
     
     // Check authentication
     const isAuthenticated = localStorage.getItem('isAuthenticated')
@@ -406,52 +442,33 @@ const SKFDashboard = () => {
                   <div className="student-info">
                     <div className="student-avatar">
                       <div className="avatar-placeholder">
-                        <div className="avatar-glow"></div>
-                        <span className="avatar-text">{student.name.split(' ').map(n => n[0]).join('')}</span>
+                        {student.name.split(' ').map(n => n[0]).join('')}
                       </div>
                     </div>
                     <div className="student-details">
                       <div className="detail-row">
-                        <div className="detail-icon">👤</div>
-                        <div className="detail-content">
-                          <span className="detail-label">Name</span>
-                          <span className="detail-value">{student.name}</span>
-                        </div>
+                        <span className="detail-label">Name</span>
+                        <span className="detail-value">{student.name}</span>
                       </div>
                       <div className="detail-row">
-                        <div className="detail-icon">🎫</div>
-                        <div className="detail-content">
-                          <span className="detail-label">Student ID</span>
-                          <span className="detail-value">{student.studentId}</span>
-                        </div>
+                        <span className="detail-label">Student ID</span>
+                        <span className="detail-value">{student.studentId}</span>
                       </div>
                       <div className="detail-row">
-                        <div className="detail-icon">📧</div>
-                        <div className="detail-content">
-                          <span className="detail-label">Email</span>
-                          <span className="detail-value">{student.email}</span>
-                        </div>
+                        <span className="detail-label">Email</span>
+                        <span className="detail-value">{student.email}</span>
                       </div>
                       <div className="detail-row">
-                        <div className="detail-icon">🎓</div>
-                        <div className="detail-content">
-                          <span className="detail-label">Department</span>
-                          <span className="detail-value">{student.department}</span>
-                        </div>
+                        <span className="detail-label">Department</span>
+                        <span className="detail-value">{student.department}</span>
                       </div>
                       <div className="detail-row">
-                        <div className="detail-icon">📅</div>
-                        <div className="detail-content">
-                          <span className="detail-label">Year</span>
-                          <span className="detail-value">{student.year}</span>
-                        </div>
+                        <span className="detail-label">Year</span>
+                        <span className="detail-value">{student.year}</span>
                       </div>
                       <div className="detail-row">
-                        <div className="detail-icon">📱</div>
-                        <div className="detail-content">
-                          <span className="detail-label">Phone</span>
-                          <span className="detail-value">{student.phone}</span>
-                        </div>
+                        <span className="detail-label">Phone</span>
+                        <span className="detail-value">{student.phone}</span>
                       </div>
                     </div>
                   </div>

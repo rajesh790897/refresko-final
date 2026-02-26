@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-// API disabled - using localStorage only
+import { cpanelApi } from '../../lib/cpanelApi'
 import './AdminLoginManagement.css'
 
 const ADMIN_ACCOUNTS_KEY = 'adminAccounts'
@@ -20,12 +20,18 @@ const saveAdminAccountsToLocalStorage = (accounts) => {
 }
 
 const loadAdminAccountsWithApi = async () => {
-  try {
-    return await loadAdminAccountsFromLocalStorage()
-  } catch (error) {
-    console.warn('Failed to load admin accounts from localStorage:', error)
-    return []
+  if (cpanelApi.isConfigured()) {
+    try {
+      const response = await cpanelApi.listAdmins()
+      const admins = Array.isArray(response?.admins) ? response.admins : []
+      saveAdminAccountsToLocalStorage(admins)
+      return admins
+    } catch {
+      return loadAdminAccountsFromLocalStorage()
+    }
   }
+
+  return loadAdminAccountsFromLocalStorage()
 }
 
 const AdminLoginManagement = () => {
@@ -77,23 +83,28 @@ const AdminLoginManagement = () => {
       return
     }
 
-    // Create admin using localStorage only
-    const newAdmin = {
-      id: `admin_${Date.now()}`,
-      name,
-      email,
-      password,
-      role: 'admin',
-      status: 'active',
-      created_at: new Date().toISOString()
+    // Always try API first for cross-device sync
+    if (cpanelApi.isConfigured()) {
+      try {
+        const response = await cpanelApi.createAdmin({ name, email, password, role: 'admin' })
+        console.log('✅ Admin created via API:', response)
+        
+        // Refresh admin list from database
+        const refreshed = await loadAdminAccountsWithApi()
+        setAdminAccounts(refreshed)
+        setFormData({ name: '', email: '', password: '' })
+        setSuccess('✓ Admin created and synced to database')
+        setError('')
+        return
+      } catch (apiError) {
+        console.error('API create admin failed:', apiError)
+        setError(`⚠ Database sync failed: ${apiError.message}. Please try again.`)
+        return
+      }
+    } else {
+      setError('⚠ API not configured. Cannot create admin - please check your .env file.')
+      return
     }
-
-    const updatedAccounts = [...adminAccounts, newAdmin]
-    setAdminAccounts(updatedAccounts)
-    saveAdminAccountsToLocalStorage(updatedAccounts)
-    setFormData({ name: '', email: '', password: '' })
-    setSuccess('✓ Admin created')
-    setError('')
   }
 
   const handleToggleStatus = async (adminId) => {
@@ -102,7 +113,17 @@ const AdminLoginManagement = () => {
 
     const nextStatus = currentAccount.status === 'active' ? 'inactive' : 'active'
 
-    // Update status in localStorage
+    if (cpanelApi.isConfigured()) {
+      try {
+        await cpanelApi.updateAdmin({ adminId, status: nextStatus })
+        const refreshed = await loadAdminAccountsWithApi()
+        setAdminAccounts(refreshed)
+        return
+      } catch {
+        setError('Failed to update admin status via API')
+      }
+    }
+
     const updatedAccounts = adminAccounts.map((account) =>
       account.id === adminId
         ? { ...account, status: nextStatus }
@@ -123,7 +144,19 @@ const AdminLoginManagement = () => {
       return
     }
 
-    // Update password in localStorage
+    if (cpanelApi.isConfigured()) {
+      try {
+        await cpanelApi.updateAdmin({ adminId, password: newPassword.trim() })
+        const refreshed = await loadAdminAccountsWithApi()
+        setAdminAccounts(refreshed)
+        setSuccess('Password updated successfully')
+        return
+      } catch {
+        setError('Failed to update password via API')
+        return
+      }
+    }
+
     const updatedAccounts = adminAccounts.map((account) =>
       account.id === adminId
         ? { ...account, password: newPassword.trim() }
@@ -139,7 +172,18 @@ const AdminLoginManagement = () => {
     const confirmed = window.confirm('Delete this admin login? This action cannot be undone.')
     if (!confirmed) return
 
-    // Delete admin from localStorage
+    if (cpanelApi.isConfigured()) {
+      try {
+        await cpanelApi.deleteAdmin({ adminId })
+        const refreshed = await loadAdminAccountsWithApi()
+        setAdminAccounts(refreshed)
+        return
+      } catch {
+        setError('Failed to delete admin via API')
+        return
+      }
+    }
+
     const updatedAccounts = adminAccounts.filter((account) => account.id !== adminId)
     setAdminAccounts(updatedAccounts)
     saveAdminAccountsToLocalStorage(updatedAccounts)

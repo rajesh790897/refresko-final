@@ -4,9 +4,9 @@ import QRCode from 'qrcode'
 import {
   getActivePaymentOption,
   getUpiPayload,
-  loadPaymentConfig,
-  savePaymentConfig
+  loadPaymentConfig
 } from '../../lib/paymentConfig'
+import { loadPaymentConfigWithApi, savePaymentConfigWithApi } from '../../lib/paymentConfigApi'
 import './PaymentAmountManagement.css'
 
 const PaymentAmountManagement = () => {
@@ -17,16 +17,16 @@ const PaymentAmountManagement = () => {
   const [saveMessage, setSaveMessage] = useState('')
   const [isLoading, setIsLoading] = useState(true)
 
-  // Load config from localStorage
+  // Load config from database on mount (cross-device sync)
   useEffect(() => {
     const loadConfig = async () => {
       try {
-        const dbConfig = await loadPaymentConfig()
+        const dbConfig = await loadPaymentConfigWithApi()
         setConfig(dbConfig)
         setDraftOptions(dbConfig.options)
         setActiveOptionId(dbConfig.activeOptionId)
       } catch (error) {
-        console.warn('Failed to load config from localStorage:', error)
+        console.warn('Failed to load config from API:', error)
       } finally {
         setIsLoading(false)
       }

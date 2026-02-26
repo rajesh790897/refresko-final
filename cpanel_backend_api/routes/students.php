@@ -1,76 +1,10 @@
 <?php
 
-function supabase_config(): array
-{
-    static $config = null;
-    if ($config !== null) {
-        return $config;
-    }
-
-    $env = require __DIR__ . '/../config/env.php';
-    $supabase = $env['supabase'] ?? [];
-
-    $config = [
-        'url' => rtrim((string)($supabase['url'] ?? ''), '/'),
-        'service_key' => (string)($supabase['service_key'] ?? ''),
-        'anon_key' => (string)($supabase['anon_key'] ?? ''),
-    ];
-
-    return $config;
-}
-
-function supabase_fetch_student(string $studentCode): ?array
-{
-    $config = supabase_config();
-    $supabaseKey = $config['service_key'] !== '' ? $config['service_key'] : $config['anon_key'];
-
-    if ($config['url'] === '' || $supabaseKey === '') {
-        return null;
-    }
-
-    $select = 'name,student_code,email,phone,department,year,profile_completed,'
-        . 'payment_completion,gate_pass_created,payment_approved,food_included,food_preference';
-    $query = 'select=' . urlencode($select) . '&student_code=eq.' . urlencode($studentCode) . '&limit=1';
-    $url = $config['url'] . '/rest/v1/students?' . $query;
-
-    $headers = [
-        'Content-Type: application/json',
-        'apikey: ' . $supabaseKey,
-        'Authorization: Bearer ' . $supabaseKey,
-    ];
-
-    $context = stream_context_create([
-        'http' => [
-            'method' => 'GET',
-            'header' => implode("\r\n", $headers),
-            'timeout' => 5,
-        ],
-    ]);
-
-    $response = @file_get_contents($url, false, $context);
-    if ($response === false) {
-        return null;
-    }
-
-    $data = json_decode($response, true);
-    if (!is_array($data) || count($data) === 0) {
-        return null;
-    }
-
-    return $data[0];
-}
-
 function students_get_one(): void
 {
     $studentCode = strtoupper(trim((string)($_GET['student_code'] ?? '')));
     if ($studentCode === '') {
         json_response(['success' => false, 'message' => 'student_code is required'], 422);
-    }
-    
-
-    $supabaseStudent = supabase_fetch_student($studentCode);
-    if ($supabaseStudent) {
-        json_response(['success' => true, 'student' => $supabaseStudent]);
     }
 
     $pdo = db();
