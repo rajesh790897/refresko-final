@@ -50,6 +50,14 @@ const teamMembers = [
     initial: 'AP',
     color: '#FF4D79',
     image: '/AnkitPal.jpeg'
+  },
+  {
+    id: 7,
+    name: 'DEBANJAN DEY KABIRAJ',
+    department: 'CYBER SECURITY 3rd Year',
+    initial: 'DB',
+    color: '#FF6B9D',
+    image: '/deba.jpeg'
   }
 ]
 

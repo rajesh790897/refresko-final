@@ -1,7 +1,7 @@
 const STORAGE_KEY = 'paymentGatewayConfig'
 
 export const DEFAULT_PAYMENT_CONFIG = {
-  activeOptionId: 'amount-600',
+  activeOptionId: 'amount-500',
   options: [
     {
       id: 'amount-500',

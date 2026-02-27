@@ -433,6 +433,65 @@ const SKFDashboard = () => {
                   <p className="section-subtitle">Manage your Refresko 2026 experience</p>
                 </div>
 
+                {/* Quick Stats Section */}
+                <div className="quick-stats">
+                  <motion.div 
+                    className="stat-card payment-stat"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2 }}
+                  >
+                    <div className="stat-icon">💳</div>
+                    <div className="stat-content">
+                      <span className="stat-label">Payment Status</span>
+                      <span className={`stat-value ${isPaymentApproved ? 'approved' : isPaymentDeclined ? 'declined' : 'pending'}`}>
+                        {isPaymentApproved ? '✓ Approved' : isPaymentDeclined ? '✗ Declined' : '⏳ Pending'}
+                      </span>
+                    </div>
+                  </motion.div>
+
+                  <motion.div 
+                    className="stat-card food-stat"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 }}
+                  >
+                    <div className="stat-icon">🍽️</div>
+                    <div className="stat-content">
+                      <span className="stat-label">Food Preference</span>
+                      <span className="stat-value">{student.foodPreference || 'Not Selected'}</span>
+                    </div>
+                  </motion.div>
+
+                  <motion.div 
+                    className="stat-card gate-stat"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.4 }}
+                  >
+                    <div className="stat-icon">🎫</div>
+                    <div className="stat-content">
+                      <span className="stat-label">Gate Pass</span>
+                      <span className={`stat-value ${isPaymentApproved ? 'ready' : 'unavailable'}`}>
+                        {isPaymentApproved ? '✓ Ready' : '✕ Unavailable'}
+                      </span>
+                    </div>
+                  </motion.div>
+
+                  <motion.div 
+                    className="stat-card session-stat"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.5 }}
+                  >
+                    <div className="stat-icon">🔐</div>
+                    <div className="stat-content">
+                      <span className="stat-label">Session</span>
+                      <span className="stat-value">Active & Secure</span>
+                    </div>
+                  </motion.div>
+                </div>
+
                 {/* Student Details Card */}
                 <div className="student-card">
                   <div className="card-header">
@@ -534,6 +593,67 @@ const SKFDashboard = () => {
                     </button>
                   </motion.div> */}
                 </div>
+
+                {/* Gate Pass Preview Card - Shows only if payment is approved */}
+                {isPaymentApproved && (
+                  <motion.div 
+                    className="gate-pass-preview-card"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.6, delay: 0.4 }}
+                  >
+                    <div className="preview-header">
+                      <h2>Your Gate Pass is Ready! 🎫</h2>
+                      <span className="preview-badge">ACTIVE</span>
+                    </div>
+                    
+                    <div className="preview-content">
+                      <div className="preview-qr-section">
+                        <div className="preview-qr">
+                          {gatePassQrCodeUrl ? (
+                            <img
+                              src={gatePassQrCodeUrl}
+                              alt="Quick QR Code"
+                              className="preview-qr-image"
+                            />
+                          ) : (
+                            <div className="preview-qr-placeholder">
+                              <span>Generating...</span>
+                            </div>
+                          )}
+                        </div>
+                        <p className="qr-hint">Tap to view full pass</p>
+                      </div>
+
+                      <div className="preview-info-section">
+                        <div className="preview-info-row">
+                          <span className="info-label">Pass Holder</span>
+                          <span className="info-value">{student.name}</span>
+                        </div>
+                        <div className="preview-info-row">
+                          <span className="info-label">Student ID</span>
+                          <span className="info-value code">{student.studentId}</span>
+                        </div>
+                        <div className="preview-info-row">
+                          <span className="info-label">Valid For</span>
+                          <span className="info-value">March 27-28, 2026</span>
+                        </div>
+                        <div className="preview-info-row">
+                          <span className="info-label">Status</span>
+                          <span className="info-value status-active">✓ VALID</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button 
+                      className="preview-view-btn"
+                      onClick={() => setActiveSection('gatepass')}
+                    >
+                      <span>View Full Gate Pass</span>
+                      <span className="btn-arrow">→</span>
+                    </button>
+                  </motion.div>
+                )}
 
               </motion.div>
             )}

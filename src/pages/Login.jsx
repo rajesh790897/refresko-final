@@ -163,7 +163,10 @@ const Login = () => {
           food_preference: data.food_preference || null
         }
 
-        localStorage.removeItem('adminAuthenticated')
+        // Clear all previous cookies and sessions from localStorage
+        localStorage.clear()
+        
+        // Set new authentication session
         localStorage.setItem('isAuthenticated', 'true')
         localStorage.setItem('loginEmail', data.email || data.student_code)
         localStorage.setItem('prefilledProfile', JSON.stringify(prefilledProfile))
