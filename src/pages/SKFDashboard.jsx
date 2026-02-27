@@ -451,23 +451,10 @@ const SKFDashboard = () => {
                   </motion.div>
 
                   <motion.div 
-                    className="stat-card food-stat"
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.3 }}
-                  >
-                    <div className="stat-icon">🍽️</div>
-                    <div className="stat-content">
-                      <span className="stat-label">Food Preference</span>
-                      <span className="stat-value">{student.foodPreference || 'Not Selected'}</span>
-                    </div>
-                  </motion.div>
-
-                  <motion.div 
                     className="stat-card gate-stat"
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.4 }}
+                    transition={{ delay: 0.3 }}
                   >
                     <div className="stat-icon">🎫</div>
                     <div className="stat-content">
@@ -482,7 +469,7 @@ const SKFDashboard = () => {
                     className="stat-card session-stat"
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.5 }}
+                    transition={{ delay: 0.4 }}
                   >
                     <div className="stat-icon">🔐</div>
                     <div className="stat-content">
