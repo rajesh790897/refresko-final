@@ -41,7 +41,7 @@ const Login = () => {
     return () => {
       document.body.classList.remove('system-cursor')
     }
-  }, [location.search, navigate])
+  }, [isAdminLoginMode, location.search, navigate])
 
   const handleChange = (e) => {
     setFormData({
@@ -65,8 +65,10 @@ const Login = () => {
     setIsLoading(true)
     setError('')
 
-    // Keep a small delay for UI consistency
-    setTimeout(async () => {
+    try {
+      // Keep a small delay for UI consistency
+      await new Promise(resolve => setTimeout(resolve, 800))
+
       if (isAdminLoginMode && cpanelApi.isConfigured()) {
         try {
           const response = await cpanelApi.adminLogin({ email: formData.email, password: formData.password })
@@ -163,8 +165,15 @@ const Login = () => {
           food_preference: data.food_preference || null
         }
 
-        // Clear all previous cookies and sessions from localStorage
-        localStorage.clear()
+        // Clear only student-related items from previous sessions
+        localStorage.removeItem('adminAuthenticated')
+        localStorage.removeItem('adminLoginEmail')
+        localStorage.removeItem('isAuthenticated')
+        localStorage.removeItem('profileCompleted')
+        localStorage.removeItem('studentProfile')
+        localStorage.removeItem('loginEmail')
+        localStorage.removeItem('prefilledProfile')
+        localStorage.removeItem('foodPreference')
         
         // Set new authentication session
         localStorage.setItem('isAuthenticated', 'true')
@@ -185,7 +194,11 @@ const Login = () => {
         setError('Unable to verify student credentials right now. Please try again.')
         setIsLoading(false)
       }
-    }, 800)
+    } catch (error) {
+      console.error('Login error:', error)
+      setError('An unexpected error occurred. Please try again.')
+      setIsLoading(false)
+    }
   }
 
   return (
