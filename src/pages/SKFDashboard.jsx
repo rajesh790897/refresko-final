@@ -6,6 +6,7 @@ import { isSupabaseConfigured, supabase } from '../lib/supabaseClient'
 import { cpanelApi } from '../lib/cpanelApi'
 import { getActivePaymentOption, loadPaymentConfig } from '../lib/paymentConfig'
 import { loadPaymentConfigWithApi } from '../lib/paymentConfigApi'
+import { getStudentAvatar } from '../lib/gravatarUtils'
 import './SKFDashboard.css'
 
 // Default data structure
@@ -30,6 +31,9 @@ const SKFDashboard = () => {
   const [foodPreference, setFoodPreference] = useState('')
   const [gatePassQrCodeUrl, setGatePassQrCodeUrl] = useState('')
   const [paymentConfig, setPaymentConfig] = useState(() => loadPaymentConfig())
+  const [avatarUrl, setAvatarUrl] = useState('')
+  const [avatarInitials, setAvatarInitials] = useState('')
+  const [showAvatarFallback, setShowAvatarFallback] = useState(false)
 
   const activePaymentOption = useMemo(
     () => getActivePaymentOption(paymentConfig),
@@ -233,6 +237,16 @@ const SKFDashboard = () => {
       document.body.classList.remove('system-cursor')
     }
   }, [navigate])
+
+  // Update avatar when student data changes
+  useEffect(() => {
+    if (student.email && student.name) {
+      const avatarData = getStudentAvatar(student.email, student.name, 200)
+      setAvatarUrl(avatarData.gravatar)
+      setAvatarInitials(avatarData.initials)
+      setShowAvatarFallback(false)
+    }
+  }, [student.email, student.name])
 
   const isPaymentApproved = 
     latestPayment?.status === 'completed' || 
@@ -487,9 +501,19 @@ const SKFDashboard = () => {
                   </div>
                   <div className="student-info">
                     <div className="student-avatar">
-                      <div className="avatar-placeholder">
-                        {student.name.split(' ').map(n => n[0]).join('')}
-                      </div>
+                      {!showAvatarFallback && avatarUrl ? (
+                        <img 
+                          src={avatarUrl} 
+                          alt={student.name}
+                          className="avatar-image"
+                          onError={() => setShowAvatarFallback(true)}
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="avatar-placeholder">
+                          {avatarInitials || student.name.split(' ').map(n => n[0]).join('')}
+                        </div>
+                      )}
                     </div>
                     <div className="student-details">
                       <div className="detail-row">
