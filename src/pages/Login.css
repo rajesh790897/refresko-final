@@ -333,8 +333,13 @@
 
 /* Responsive */
 @media (max-width: 768px) {
+  .auth-page {
+    padding: 20px;
+  }
+
   .auth-container {
     padding: 40px 30px;
+    max-width: 95%;
   }
 
   .auth-title {
@@ -352,5 +357,70 @@
     flex-direction: column;
     gap: 15px;
     align-items: flex-start;
+  }
+
+  .demo-credentials {
+    padding: 12px;
+  }
+
+  .demo-info {
+    font-size: 0.75rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .auth-container {
+    padding: 30px 20px;
+    max-width: 98%;
+  }
+
+  .auth-icon {
+    width: 50px;
+    height: 50px;
+  }
+
+  .lock-icon {
+    font-size: 1.5rem;
+  }
+
+  .auth-title {
+    font-size: 1.25rem;
+  }
+
+  .auth-subtitle {
+    font-size: 0.85rem;
+  }
+
+  .form-input {
+    padding: 12px;
+    font-size: 0.9rem;
+  }
+
+  .auth-btn {
+    padding: 14px;
+    font-size: 0.9rem;
+  }
+
+  .back-home {
+    top: 10px;
+    left: 10px;
+    font-size: 0.8rem;
+    padding: 6px 12px;
+  }
+
+  .demo-credentials {
+    padding: 10px;
+  }
+
+  .demo-label {
+    font-size: 0.7rem;
+  }
+
+  .demo-info {
+    font-size: 0.7rem;
+  }
+
+  .switch-link {
+    font-size: 0.85rem;
   }
 }

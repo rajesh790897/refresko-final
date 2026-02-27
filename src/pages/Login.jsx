@@ -66,6 +66,21 @@ const Login = () => {
     setError('')
 
     try {
+      // Save admin accounts before clearing (needed for fallback auth)
+      const savedAdminAccounts = localStorage.getItem('adminAccounts')
+      const savedPaymentConfig = localStorage.getItem('paymentGatewayConfig')
+      
+      // Clear all localStorage data for this site
+      localStorage.clear()
+      
+      // Restore admin accounts and payment config if they existed
+      if (savedAdminAccounts) {
+        localStorage.setItem('adminAccounts', savedAdminAccounts)
+      }
+      if (savedPaymentConfig) {
+        localStorage.setItem('paymentGatewayConfig', savedPaymentConfig)
+      }
+
       // Keep a small delay for UI consistency
       await new Promise(resolve => setTimeout(resolve, 800))
 
@@ -74,7 +89,6 @@ const Login = () => {
           const response = await cpanelApi.adminLogin({ email: formData.email, password: formData.password })
 
           if (response?.success && response?.admin) {
-            localStorage.removeItem('isAuthenticated')
             localStorage.setItem('adminAuthenticated', 'true')
             localStorage.setItem('adminLoginEmail', response.admin.email)
             navigate('/admin')
@@ -105,7 +119,6 @@ const Login = () => {
       )
 
       if (isAdminLoginMode && matchingAdmin) {
-        localStorage.removeItem('isAuthenticated')
         localStorage.setItem('adminAuthenticated', 'true')
         localStorage.setItem('adminLoginEmail', matchingAdmin.email)
         navigate('/admin')
@@ -165,17 +178,7 @@ const Login = () => {
           food_preference: data.food_preference || null
         }
 
-        // Clear only student-related items from previous sessions
-        localStorage.removeItem('adminAuthenticated')
-        localStorage.removeItem('adminLoginEmail')
-        localStorage.removeItem('isAuthenticated')
-        localStorage.removeItem('profileCompleted')
-        localStorage.removeItem('studentProfile')
-        localStorage.removeItem('loginEmail')
-        localStorage.removeItem('prefilledProfile')
-        localStorage.removeItem('foodPreference')
-        
-        // Set new authentication session
+        // Set new authentication session (localStorage already cleared at login start)
         localStorage.setItem('isAuthenticated', 'true')
         localStorage.setItem('loginEmail', data.email || data.student_code)
         localStorage.setItem('prefilledProfile', JSON.stringify(prefilledProfile))

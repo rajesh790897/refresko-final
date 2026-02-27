@@ -237,3 +237,31 @@
     display: none;
   }
 }
+
+@media (max-width: 480px) {
+  .footer {
+    padding: 60px 15px;
+  }
+
+  .footer-heading {
+    font-size: clamp(2rem, 8vw, 3rem);
+    letter-spacing: 0.05em;
+  }
+
+  .footer-btn {
+    padding: 14px 30px;
+    font-size: 0.85rem;
+  }
+
+  .footer-slogan {
+    font-size: 0.85rem;
+  }
+
+  .footer-links a {
+    font-size: 0.9rem;
+  }
+
+  .footer-copyright {
+    font-size: 0.75rem;
+  }
+}

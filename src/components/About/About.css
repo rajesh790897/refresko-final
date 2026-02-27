@@ -233,3 +233,44 @@
     display: none;
   }
 }
+
+@media (max-width: 480px) {
+  .about {
+    padding: 60px 15px;
+  }
+
+  .about-label {
+    font-size: 1.5rem;
+  }
+
+  .about-title {
+    font-size: 2rem;
+  }
+
+  .about-description {
+    font-size: 0.9rem;
+    line-height: 1.6;
+  }
+
+  .about-visual {
+    height: 250px;
+  }
+
+  .about-stats {
+    gap: 15px;
+    padding: 20px 0;
+  }
+
+  .stat-item {
+    flex: 1 1 100px;
+    min-width: 100px;
+  }
+
+  .stat-value {
+    font-size: 1.5rem;
+  }
+
+  .stat-label {
+    font-size: 0.75rem;
+  }
+}

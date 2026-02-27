@@ -89,3 +89,71 @@ button {
   background: var(--color-primary);
   color: var(--color-secondary);
 }
+
+/* Base Responsive Styles */
+html,
+body {
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Ensure images are responsive */
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* Mobile-first responsive typography */
+@media (max-width: 768px) {
+  body {
+    font-size: 14px;
+  }
+  
+  h1 {
+    font-size: clamp(1.5rem, 5vw, 2.5rem);
+  }
+  
+  h2 {
+    font-size: clamp(1.25rem, 4vw, 2rem);
+  }
+  
+  h3 {
+    font-size: clamp(1.1rem, 3.5vw, 1.75rem);
+  }
+  
+  p {
+    font-size: clamp(0.9rem, 2.5vw, 1.1rem);
+  }
+  
+  /* Hide custom cursor on mobile */
+  body {
+    cursor: auto !important;
+  }
+  
+  button,
+  a,
+  input,
+  textarea,
+  select {
+    cursor: auto !important;
+  }
+}
+
+@media (max-width: 480px) {
+  body {
+    font-size: 13px;
+  }
+  
+  /* Adjust scrollbar for mobile */
+  ::-webkit-scrollbar {
+    width: 4px;
+  }
+}
