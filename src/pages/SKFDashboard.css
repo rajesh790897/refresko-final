@@ -46,21 +46,30 @@
   top: 20px;
   left: 20px;
   font-family: var(--font-body);
-  font-size: 0.9rem;
-  color: var(--color-text-muted);
+  font-size: 0.95rem;
+  color: var(--color-text);
   text-decoration: none;
   transition: all 0.3s ease;
   z-index: 1000;
-  padding: 8px 16px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(10, 10, 10, 0.8);
-  backdrop-filter: blur(10px);
+  padding: 10px 20px;
+  border: 1px solid rgba(255, 0, 51, 0.3);
+  background: rgba(10, 10, 10, 0.95);
+  backdrop-filter: blur(15px);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
 }
 
 .dashboard-page .back-home:hover {
   color: var(--color-primary);
   border-color: var(--color-primary);
-  transform: translateX(-3px);
+  background: rgba(10, 10, 10, 0.98);
+  transform: translateX(-4px);
+  box-shadow: 0 6px 20px rgba(255, 0, 51, 0.2);
 }
 
 /* Dashboard Layout */
@@ -633,16 +642,22 @@
 }
 
 .preview-qr {
-  width: 140px;
-  height: 140px;
-  padding: 12px;
+  width: 180px;
+  height: 180px;
+  padding: 14px;
   background: white;
-  border-radius: 8px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 12px;
-  box-shadow: 0 0 30px rgba(100, 255, 150, 0.2);
+  margin: 0 auto 16px;
+  box-shadow: 0 0 35px rgba(100, 255, 150, 0.25);
+  transition: all 0.3s ease;
+}
+
+.preview-qr:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 45px rgba(100, 255, 150, 0.35);
 }
 
 .preview-qr-image {
@@ -890,12 +905,18 @@
 .qr-code {
   position: relative;
   display: inline-block;
-  padding: 24px;
+  padding: 28px;
   background: white;
-  margin-bottom: 24px;
-  border-radius: 10px;
-  box-shadow: 0 10px 40px rgba(100, 255, 150, 0.2);
+  margin-bottom: 28px;
+  border-radius: 12px;
+  box-shadow: 0 10px 50px rgba(100, 255, 150, 0.3);
   animation: pulse-glow 3s ease-in-out infinite;
+  transition: all 0.3s ease;
+}
+
+.qr-code:hover {
+  transform: scale(1.03);
+  box-shadow: 0 15px 60px rgba(100, 255, 150, 0.4);
 }
 
 @keyframes pulse-glow {
@@ -904,8 +925,8 @@
 }
 
 .qr-placeholder {
-  width: 200px;
-  height: 200px;
+  width: 250px;
+  height: 250px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1546,9 +1567,9 @@ body {
   }
   
   .preview-qr {
-    width: 100px;
-    height: 100px;
-    margin: 0 auto 12px;
+    width: 140px;
+    height: 140px;
+    margin: 0 auto 14px;
   }
   
   .preview-info-row {
@@ -1617,10 +1638,11 @@ body {
 
 @media (max-width: 480px) {
   .dashboard-page .back-home {
-    top: 10px;
-    left: 10px;
-    padding: 6px 12px;
-    font-size: 0.75rem;
+    top: 12px;
+    left: 12px;
+    padding: 8px 14px;
+    font-size: 0.82rem;
+    border-radius: 5px;
   }
   
   /* Convert sidebar to bottom nav on very small screens */
@@ -1757,8 +1779,8 @@ body {
   }
   
   .preview-qr {
-    width: 90px;
-    height: 90px;
+    width: 120px;
+    height: 120px;
   }
   
   .preview-info-row {
@@ -1808,8 +1830,8 @@ body {
   }
   
   .qr-placeholder {
-    width: 140px;
-    height: 140px;
+    width: 180px;
+    height: 180px;
   }
   
   .pass-info,
