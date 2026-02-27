@@ -1,5 +1,8 @@
 const API_BASE_URL = (import.meta.env.VITE_CPANEL_API_BASE_URL || '').replace(/\/$/, '')
 const SUPERADMIN_TOKEN = import.meta.env.VITE_CPANEL_SUPERADMIN_TOKEN || ''
+const REQUEST_TIMEOUT = 15000 // 15 seconds
+const MAX_RETRIES = 3
+const RETRY_DELAY_MS = 1000 // Initial retry delay
 
 const parseJsonSafe = async (response) => {
   try {
@@ -20,37 +23,95 @@ const buildUrl = (path, query) => {
   return `${base}${trimmedPath}${queryString}`
 }
 
-const request = async (path, { method = 'GET', headers = {}, body, query } = {}) => {
+const createTimeoutPromise = (ms) => {
+  return new Promise((_, reject) => {
+    setTimeout(() => {
+      const error = new Error('Request timeout - Network may be slow or unreachable')
+      error.code = 'TIMEOUT'
+      reject(error)
+    }, ms)
+  })
+}
+
+const request = async (path, { method = 'GET', headers = {}, body, query, timeout = REQUEST_TIMEOUT } = {}) => {
   if (!API_BASE_URL) {
     const error = new Error('CPANEL_API_BASE_URL_MISSING')
     error.code = 'CPANEL_API_BASE_URL_MISSING'
     throw error
   }
 
-  // For FormData, don't set Content-Type header - let browser set it with boundary
-  const fetchOptions = {
-    method,
-    body
+  let lastError = null
+  
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      // For FormData, don't set Content-Type header - let browser set it with boundary
+      const fetchOptions = {
+        method,
+        body,
+        mode: 'cors',
+        credentials: 'include'
+      }
+
+      // Only include headers if not FormData
+      if (!(body instanceof FormData)) {
+        fetchOptions.headers = {
+          ...headers,
+          'Accept': 'application/json'
+        }
+      }
+
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), timeout)
+
+      try {
+        const response = await fetch(buildUrl(path, query), {
+          ...fetchOptions,
+          signal: controller.signal
+        })
+
+        clearTimeout(timeoutId)
+
+        const payload = await parseJsonSafe(response)
+
+        if (!response.ok || payload?.success === false) {
+          const message = payload?.message || `Request failed with status ${response.status}`
+          const error = new Error(message)
+          error.status = response.status
+          error.payload = payload
+          throw error
+        }
+
+        return payload
+      } catch (error) {
+        clearTimeout(timeoutId)
+        throw error
+      }
+    } catch (error) {
+      lastError = error
+      
+      // Don't retry on certain errors
+      if (error.code === 'CPANEL_API_BASE_URL_MISSING' || error.status === 401 || error.status === 403) {
+        throw error
+      }
+
+      // Log retry attempt
+      if (attempt < MAX_RETRIES) {
+        const delay = RETRY_DELAY_MS * attempt
+        console.warn(`API request failed (attempt ${attempt}/${MAX_RETRIES}), retrying in ${delay}ms...`, error.message)
+        
+        // Wait before retrying with exponential backoff
+        await new Promise(resolve => setTimeout(resolve, delay))
+      }
+    }
   }
 
-  // Only include headers if not FormData
-  if (!(body instanceof FormData)) {
-    fetchOptions.headers = headers
-  }
-
-  const response = await fetch(buildUrl(path, query), fetchOptions)
-
-  const payload = await parseJsonSafe(response)
-
-  if (!response.ok || payload?.success === false) {
-    const message = payload?.message || `Request failed with status ${response.status}`
-    const error = new Error(message)
-    error.status = response.status
-    error.payload = payload
-    throw error
-  }
-
-  return payload
+  // If all retries failed, throw the last error with enhanced message
+  const error = new Error(
+    lastError?.message || 'Failed to connect to server after multiple attempts'
+  )
+  error.code = lastError?.code || 'REQUEST_FAILED'
+  error.originalError = lastError
+  throw error
 }
 
 export const cpanelApi = {

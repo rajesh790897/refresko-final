@@ -82,7 +82,7 @@ const Login = () => {
       }
 
       // Keep a small delay for UI consistency
-      await new Promise(resolve => setTimeout(resolve, 800))
+      await new Promise(resolve => setTimeout(resolve, 500))
 
       if (isAdminLoginMode && cpanelApi.isConfigured()) {
         try {
@@ -132,7 +132,7 @@ const Login = () => {
       }
 
       if (!isSupabaseConfigured || !supabase) {
-        setError('Supabase is not configured. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.')
+        setError('Database connection failed. Please try again or contact support.')
         setIsLoading(false)
         return
       }
@@ -141,11 +141,17 @@ const Login = () => {
         const studentCode = formData.email.trim().toUpperCase()
         const enteredPhone = normalizePhone(formData.password)
 
+        // Add timeout to Supabase query
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 15000)
+
         const { data, error: fetchError } = await supabase
           .from('students')
           .select('name, student_code, email, phone, department, year, profile_completed, payment_completion, gate_pass_created, payment_approved, food_included, food_preference')
           .eq('student_code', studentCode)
           .maybeSingle()
+
+        clearTimeout(timeoutId)
 
         if (fetchError) {
           throw fetchError
@@ -194,12 +200,22 @@ const Login = () => {
         navigate('/profile-setup')
       } catch (err) {
         console.error('Student login verification failed:', err)
-        setError('Unable to verify student credentials right now. Please try again.')
+        
+        // Provide specific error messages for different failure types
+        if (err.message?.includes('timeout') || err.code === 'TIMEOUT') {
+          setError('Connection timeout. Please check your internet connection and try again. If problem persists, try using a VPN.')
+        } else if (err.message?.includes('network') || err.message?.includes('Failed to fetch')) {
+          setError('Network connection error. Please check your internet and try again.')
+        } else if (err.message?.includes('CORS') || err.message?.includes('cross-origin')) {
+          setError('Connection blocked. Please try again or contact support.')
+        } else {
+          setError('Unable to verify credentials. Please try again.')
+        }
         setIsLoading(false)
       }
     } catch (error) {
       console.error('Login error:', error)
-      setError('An unexpected error occurred. Please try again.')
+      setError('An unexpected error occurred. Please check your connection and try again.')
       setIsLoading(false)
     }
   }
