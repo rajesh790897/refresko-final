@@ -5,6 +5,11 @@ import { cpanelApi } from '../lib/cpanelApi'
 import './Login.css'
 
 const normalizePhone = (value) => value.replace(/\D/g, '')
+const parseBoolish = (value) => {
+  if (value === true || value === 1 || value === '1') return true
+  const normalized = String(value ?? '').trim().toLowerCase()
+  return ['true', 'yes', 'y', 'on'].includes(normalized)
+}
 
 const Login = () => {
   const navigate = useNavigate()
@@ -161,10 +166,10 @@ const Login = () => {
           phone: data.phone || '',
           department: data.department || '',
           year: data.year || '',
-          payment_completion: data.payment_completion === 1 || data.payment_completion === true,
-          gate_pass_created: data.gate_pass_created === 1 || data.gate_pass_created === true,
+          payment_completion: parseBoolish(data.payment_completion),
+          gate_pass_created: parseBoolish(data.gate_pass_created),
           payment_approved: data.payment_approved || 'pending',
-          food_included: data.food_included === 1 || data.food_included === true,
+          food_included: parseBoolish(data.food_included),
           food_preference: data.food_preference || null
         }
 
@@ -173,7 +178,7 @@ const Login = () => {
         localStorage.setItem('loginEmail', data.email || data.student_code)
         localStorage.setItem('prefilledProfile', JSON.stringify(prefilledProfile))
 
-        if (data.profile_completed === 1 || data.profile_completed === true) {
+        if (parseBoolish(data.profile_completed)) {
           localStorage.setItem('studentProfile', JSON.stringify(prefilledProfile))
           localStorage.setItem('profileCompleted', 'true')
           navigate('/dashboard')

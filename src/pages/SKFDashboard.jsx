@@ -7,6 +7,18 @@ import { getActivePaymentOption, loadPaymentConfig } from '../lib/paymentConfig'
 import { loadPaymentConfigWithApi } from '../lib/paymentConfigApi'
 import './SKFDashboard.css'
 
+const parseBoolish = (value) => {
+  if (value === true || value === 1 || value === '1') return true
+  const normalized = String(value ?? '').trim().toLowerCase()
+  return ['true', 'yes', 'y', 'on'].includes(normalized)
+}
+
+const normalizeApprovalState = (value) => {
+  const normalized = String(value ?? '').trim().toLowerCase()
+  if (['approved', 'declined', 'pending'].includes(normalized)) return normalized
+  return 'pending'
+}
+
 // Default data structure
 const defaultStudentData = {
   name: 'John Doe',
@@ -48,11 +60,24 @@ const SKFDashboard = () => {
           const studentResponse = await cpanelApi.getStudentByCode(studentCode)
           if (studentResponse?.success && studentResponse?.student) {
             const data = studentResponse.student
+            const paymentCompletion = parseBoolish(data.payment_completion)
+            const gatePassCreated = parseBoolish(data.gate_pass_created)
+            const paymentApproved = normalizeApprovalState(data.payment_approved)
+
+            let status = 'pending'
+            if (paymentApproved === 'approved') {
+              status = 'completed'
+            } else if (paymentApproved === 'declined') {
+              status = 'declined'
+            } else if (paymentCompletion) {
+              status = 'processing'
+            }
+
             return {
-              status: data.payment_completion ? 'completed' : 'pending',
-              payment_approved: data.payment_approved || 'pending',
-              payment_completion: Boolean(data.payment_completion === 1 || data.payment_completion === true),
-              gate_pass_created: Boolean(data.gate_pass_created === 1 || data.gate_pass_created === true),
+              status,
+              payment_approved: paymentApproved,
+              payment_completion: paymentCompletion,
+              gate_pass_created: gatePassCreated,
               amount: configuredPaymentAmount
             }
           }
@@ -104,13 +129,15 @@ const SKFDashboard = () => {
         ...(latest || {}),
         ...(dbPaymentStatus || {}),
         amount: nextAmount,
-        // Database status takes priority for approval/status
         status: dbPaymentStatus?.status || latest?.status || 'pending',
-        payment_approved: dbPaymentStatus?.payment_approved || latest?.payment_approved || latest?.paymentApproved || 'pending',
-        paymentApproved: dbPaymentStatus?.payment_approved || latest?.paymentApproved || latest?.payment_approved || 'pending',
-        payment_completion: typeof dbPaymentStatus?.payment_completion === 'boolean'
-          ? dbPaymentStatus.payment_completion
-          : Boolean(latest?.payment_completion)
+        payment_approved: normalizeApprovalState(dbPaymentStatus?.payment_approved || latest?.payment_approved || latest?.paymentApproved || 'pending'),
+        paymentApproved: normalizeApprovalState(dbPaymentStatus?.payment_approved || latest?.paymentApproved || latest?.payment_approved || 'pending'),
+        payment_completion: dbPaymentStatus?.payment_completion !== undefined
+          ? parseBoolish(dbPaymentStatus.payment_completion)
+          : parseBoolish(latest?.payment_completion),
+        gate_pass_created: dbPaymentStatus?.gate_pass_created !== undefined
+          ? parseBoolish(dbPaymentStatus.gate_pass_created)
+          : parseBoolish(latest?.gate_pass_created)
       }
 
       setLatestPayment(finalPaymentData)
@@ -125,7 +152,7 @@ const SKFDashboard = () => {
               status: dbPaymentStatus.status,
               payment_approved: dbPaymentStatus.payment_approved,
               paymentApproved: dbPaymentStatus.payment_approved,
-              payment_completion: Boolean(dbPaymentStatus.payment_completion)
+              payment_completion: parseBoolish(dbPaymentStatus.payment_completion)
             }
           }
           return payment
@@ -201,27 +228,27 @@ const SKFDashboard = () => {
   }, [navigate])
 
   const isPaymentApproved = 
-    latestPayment?.status === 'completed' || 
-    latestPayment?.status === 'approved' ||
-    latestPayment?.payment_approved === 'approved' ||
-    latestPayment?.paymentApproved === 'approved'
+    normalizeApprovalState(latestPayment?.payment_approved || latestPayment?.paymentApproved) === 'approved'
   
   const isPaymentDeclined = 
-    latestPayment?.status === 'declined' ||
-    latestPayment?.payment_approved === 'declined' ||
-    latestPayment?.paymentApproved === 'declined'
+    normalizeApprovalState(latestPayment?.payment_approved || latestPayment?.paymentApproved) === 'declined'
 
   const isPaymentCompleted =
-    latestPayment?.payment_completion === true ||
-    latestPayment?.payment_completion === 1 ||
-    latestPayment?.payment_completion === '1'
+    parseBoolish(latestPayment?.payment_completion)
+  const isGatePassCreated = parseBoolish(latestPayment?.gate_pass_created)
   const payment = latestPayment
     ? {
         transactionId: latestPayment.transactionId || latestPayment.utrNo || 'N/A',
         amount: `₹${Number(latestPayment.amount || configuredPaymentAmount)}`,
         paymentDate: latestPayment.date || new Date().toISOString(),
         paymentMethod: latestPayment.paymentMethod || 'UPI',
-        status: isPaymentApproved ? 'Approved' : latestPayment.status === 'declined' ? 'Declined' : 'Under Review',
+        status: isPaymentApproved
+          ? 'Approved'
+          : isPaymentDeclined
+            ? 'Declined'
+            : isPaymentCompleted
+              ? 'Under Review'
+              : 'Pending',
         description: 'Refresko 2026 - SKF Student Registration'
       }
     : null
@@ -239,7 +266,7 @@ const SKFDashboard = () => {
     let isActive = true
 
     const generateGatePassQrCode = async () => {
-      if (!isPaymentApproved) {
+      if (!isPaymentApproved || !isGatePassCreated) {
         setGatePassQrCodeUrl('')
         return
       }
@@ -267,7 +294,7 @@ const SKFDashboard = () => {
     return () => {
       isActive = false
     }
-  }, [gatePassPayload, isPaymentApproved])
+  }, [gatePassPayload, isPaymentApproved, isGatePassCreated])
 
   const handleLogout = () => {
     // Clear authentication data
