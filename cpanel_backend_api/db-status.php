@@ -17,7 +17,7 @@ try {
     
     // Test 3: Check tables exist
     $tables = $pdo->query("SHOW TABLES")->fetchAll(PDO::FETCH_COLUMN);
-    $requiredTables = ['student_details', 'payments', 'payment_gateway_config', 'used_utr_registry', 'admin_users'];
+    $requiredTables = ['student_details', 'payments', 'payment_gateway_config', 'used_utr_registry', 'admin_users', 'super_admin_credentials'];
     $missingTables = array_diff($requiredTables, $tables);
     
     // Test 4: Count records

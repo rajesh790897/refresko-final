@@ -6,6 +6,12 @@ import './StudentManagement.css'
 
 const PAGE_SIZE = 50
 
+const isTrueFlag = (value) => {
+  if (value === true || value === 1 || value === '1') return true
+  const normalized = String(value ?? '').trim().toLowerCase()
+  return normalized === 'true' || normalized === 'yes' || normalized === 'on'
+}
+
 const normalizeApprovalStatus = (value) => {
   if (!value) return 'pending'
   const normalized = String(value).trim().toLowerCase()
@@ -24,9 +30,9 @@ const mapStudentRecord = (record) => ({
   year: record.year || 'N/A',
   rollNumber: record.student_code || 'N/A',
   registeredEvents: [],
-  status: record.profile_completed === true ? 'active' : 'inactive',
-  paymentCompletion: record.payment_completion === true,
-  gatePassCreated: record.gate_pass_created === true,
+  status: isTrueFlag(record.profile_completed) ? 'active' : 'inactive',
+  paymentCompletion: isTrueFlag(record.payment_completion),
+  gatePassCreated: isTrueFlag(record.gate_pass_created),
   paymentApproved: normalizeApprovalStatus(record.payment_approved),
   lastLogin: record.updated_at ? new Date(record.updated_at).toLocaleString() : 'N/A'
 })
@@ -56,8 +62,8 @@ const StudentManagement = () => {
         const maxPages = 20
 
         for (let pageCount = 0; pageCount < maxPages; pageCount++) {
-          const response = await cpanelApi.listPayments({ limit: batchSize, offset })
-          const chunk = Array.isArray(response?.payments) ? response.payments : []
+          const response = await cpanelApi.listStudents({ limit: batchSize, offset })
+          const chunk = Array.isArray(response?.students) ? response.students : []
 
           if (chunk.length === 0) {
             break
@@ -71,30 +77,7 @@ const StudentManagement = () => {
           }
         }
 
-        const studentMap = new Map()
-        allRows.forEach((payment) => {
-          const studentCode = payment.student_code
-          if (!studentCode || studentMap.has(studentCode)) return
-
-          studentMap.set(studentCode, {
-            id: studentCode,
-            name: payment.student_name || 'N/A',
-            email: payment.email || 'N/A',
-            phone: payment.phone || 'N/A',
-            college: 'Supreme Knowledge Foundation',
-            department: payment.department || 'N/A',
-            year: payment.year || 'N/A',
-            rollNumber: studentCode,
-            registeredEvents: [],
-            status: 'active',
-            paymentCompletion: payment.status === 'completed',
-            gatePassCreated: false,
-            paymentApproved: normalizeApprovalStatus(payment.payment_approved),
-            lastLogin: payment.created_at ? new Date(payment.created_at).toLocaleString() : 'N/A'
-          })
-        })
-
-        setStudents(Array.from(studentMap.values()))
+        setStudents(allRows.map(mapStudentRecord))
       } catch (error) {
         console.error('Failed to fetch students:', error)
         setStudents([])

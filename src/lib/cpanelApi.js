@@ -198,6 +198,12 @@ export const cpanelApi = {
     })
   },
 
+  listStudents: async ({ search, status = 'all', limit = 500, offset = 0 } = {}) => {
+    return request('/students/list', {
+      query: { search, status, limit, offset }
+    })
+  },
+
   updateStudent: async (studentData) => {
     if (!studentData?.student_code) {
       throw new Error('Student code is required')
@@ -248,35 +254,13 @@ export const cpanelApi = {
   },
 
   superAdminLogin: async ({ username, password }) => {
-    try {
-      return await request('/super-admin/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ username, password })
-      })
-    } catch (primaryError) {
-      const status = Number(primaryError?.status || 0)
-      const message = String(primaryError?.message || '').toLowerCase()
-      const shouldFallback = status === 404 || status >= 500 || message.includes('internal server error')
-
-      if (!shouldFallback) {
-        throw primaryError
-      }
-
-      return request('/admin/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          username,
-          email: username,
-          password
-        })
-      })
-    }
+    return request('/super-admin/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ username, password })
+    })
   },
 
   listAdmins: async () => {

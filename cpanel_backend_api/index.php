@@ -11,6 +11,7 @@ require_once __DIR__ . '/routes/config.php';
 require_once __DIR__ . '/routes/students.php';
 require_once __DIR__ . '/routes/payments.php';
 require_once __DIR__ . '/routes/admin.php';
+require_once __DIR__ . '/routes/super_admin.php';
 
 apply_cors();
 
@@ -45,6 +46,10 @@ try {
 
     if ($method === 'GET' && $path === '/students/get') {
         students_get_one();
+    }
+
+    if ($method === 'GET' && $path === '/students/list') {
+        students_list();
     }
 
     if ($method === 'POST' && $path === '/students/upsert') {

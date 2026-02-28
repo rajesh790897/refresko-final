@@ -31,6 +31,80 @@ function normalize_payment_approved_state($value): string
     return 'pending';
 }
 
+function students_list(): void
+{
+    $search = trim((string)($_GET['search'] ?? ''));
+    $status = strtolower(trim((string)($_GET['status'] ?? 'all')));
+    $limit = (int)($_GET['limit'] ?? 500);
+    $offset = (int)($_GET['offset'] ?? 0);
+
+    $limit = max(1, min(2000, $limit));
+    $offset = max(0, $offset);
+
+    $pdo = db();
+
+    $where = [];
+    $params = [];
+
+    if ($status === 'active') {
+        $where[] = 'profile_completed = 1';
+    } elseif ($status === 'inactive') {
+        $where[] = 'profile_completed = 0';
+    }
+
+    if ($search !== '') {
+        $where[] = '(student_code LIKE :search OR name LIKE :search OR email LIKE :search OR phone LIKE :search OR department LIKE :search OR year LIKE :search)';
+        $params[':search'] = '%' . $search . '%';
+    }
+
+    $countSql = 'SELECT COUNT(*) FROM student_details';
+    if ($where) {
+        $countSql .= ' WHERE ' . implode(' AND ', $where);
+    }
+
+    $countStmt = $pdo->prepare($countSql);
+    foreach ($params as $paramKey => $paramValue) {
+        $countStmt->bindValue($paramKey, $paramValue, PDO::PARAM_STR);
+    }
+    $countStmt->execute();
+    $total = (int)($countStmt->fetchColumn() ?: 0);
+
+    $sql = 'SELECT id, student_code, name, email, phone, department, year, profile_completed, payment_completion, gate_pass_created, payment_approved, food_included, food_preference, created_at, updated_at
+            FROM student_details';
+    if ($where) {
+        $sql .= ' WHERE ' . implode(' AND ', $where);
+    }
+    $sql .= ' ORDER BY id DESC LIMIT :limit OFFSET :offset';
+
+    $stmt = $pdo->prepare($sql);
+    foreach ($params as $paramKey => $paramValue) {
+        $stmt->bindValue($paramKey, $paramValue, PDO::PARAM_STR);
+    }
+    $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+    $stmt->execute();
+
+    $rows = $stmt->fetchAll();
+
+    $students = array_map(static function (array $row): array {
+        $row['profile_completed'] = boolish_to_int($row['profile_completed'] ?? 0);
+        $row['payment_completion'] = boolish_to_int($row['payment_completion'] ?? 0);
+        $row['gate_pass_created'] = boolish_to_int($row['gate_pass_created'] ?? 0);
+        $row['food_included'] = boolish_to_int($row['food_included'] ?? 0);
+        $row['payment_approved'] = normalize_payment_approved_state($row['payment_approved'] ?? 'pending');
+        return $row;
+    }, $rows);
+
+    json_response([
+        'success' => true,
+        'students' => $students,
+        'total' => $total,
+        'limit' => $limit,
+        'offset' => $offset,
+        'has_more' => ($offset + count($students)) < $total,
+    ]);
+}
+
 function students_get_one(): void
 {
     $studentCode = strtoupper(trim((string)($_GET['student_code'] ?? '')));

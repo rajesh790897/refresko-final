@@ -44,55 +44,29 @@ const SuperAdmin = () => {
     setLoading(true)
 
     try {
-      // Try cPanel API for super admin login
-      if (cpanelApi.isConfigured()) {
-        try {
-          const response = await cpanelApi.superAdminLogin({ username: username.trim(), password })
-          if (response?.success && response?.admin) {
-            const displayIdentity = response.admin.username || response.admin.email || username.trim()
-            setIsAuthenticated(true)
-            setLoggedInUser(displayIdentity)
-            sessionStorage.setItem('superAdminAuth', 'true')
-            sessionStorage.setItem('superAdminUsername', displayIdentity)
-            setError('')
-            setLoading(false)
-            return
-          }
-        } catch (apiError) {
-          console.warn('Super admin API login failed, checking fallback credentials:', apiError)
-        }
+      if (!cpanelApi.isConfigured()) {
+        setError('Super admin API is not configured.')
+        setLoading(false)
+        return
       }
 
-      // Fallback: Check stored admin credentials
-      try {
-        const savedAdminAccounts = localStorage.getItem('adminAccounts')
-        const adminAccounts = savedAdminAccounts ? JSON.parse(savedAdminAccounts) : []
-        
-        const matchingAdmin = adminAccounts.find(
-          (admin) => 
-            admin.email === username.trim().toLowerCase() &&
-            admin.password === password &&
-            admin.status === 'active'
-        )
-
-        if (matchingAdmin) {
-          setIsAuthenticated(true)
-          setLoggedInUser(matchingAdmin.email)
-          sessionStorage.setItem('superAdminAuth', 'true')
-          sessionStorage.setItem('superAdminUsername', matchingAdmin.email)
-          setError('')
-          setLoading(false)
-          return
-        }
-      } catch (localStorageError) {
-        console.warn('localStorage check failed:', localStorageError)
+      const response = await cpanelApi.superAdminLogin({ username: username.trim(), password })
+      if (response?.success && response?.admin) {
+        const displayIdentity = response.admin.username || response.admin.email || username.trim()
+        setIsAuthenticated(true)
+        setLoggedInUser(displayIdentity)
+        sessionStorage.setItem('superAdminAuth', 'true')
+        sessionStorage.setItem('superAdminUsername', displayIdentity)
+        setError('')
+        setLoading(false)
+        return
       }
 
       setError('Invalid username or password')
       setLoading(false)
     } catch (err) {
       console.error('Login error:', err)
-      setError('Login failed. Please try again.')
+      setError(err?.message || 'Login failed. Please try again.')
     } finally {
       setLoading(false)
     }
