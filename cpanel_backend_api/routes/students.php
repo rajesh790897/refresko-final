@@ -39,7 +39,11 @@ function students_get_one(): void
     }
 
     $pdo = db();
-    $stmt = $pdo->prepare('SELECT * FROM student_details WHERE student_code = :student_code LIMIT 1');
+    $stmt = $pdo->prepare('SELECT *
+                          FROM student_details
+                          WHERE UPPER(TRIM(student_code)) = :student_code
+                          ORDER BY profile_completed DESC, id DESC
+                          LIMIT 1');
     $stmt->execute([':student_code' => $studentCode]);
     $student = $stmt->fetch();
 
@@ -64,8 +68,7 @@ function students_get_one(): void
     if ($latestPayment) {
         $approvedState = normalize_payment_approved_state($latestPayment['payment_approved'] ?? 'pending');
 
-        $statusState = strtolower(trim((string)($latestPayment['status'] ?? 'pending')));
-        $isPaymentSubmitted = $statusState === 'pending' || $statusState === 'completed' || $approvedState === 'approved';
+        $isPaymentSubmitted = true;
         $isGatePassReady = $approvedState === 'approved';
 
         $student['payment_completion'] = $isPaymentSubmitted ? 1 : 0;
@@ -86,6 +89,7 @@ function students_upsert_profile(): void
     require_fields($payload, ['student_code', 'name', 'phone']);
 
     $studentCode = strtoupper(trim((string)$payload['student_code']));
+    $originalStudentCode = strtoupper(trim((string)($payload['original_student_code'] ?? '')));
     $name = trim((string)($payload['name'] ?? ''));
 
     if ($studentCode === '' || $name === '') {
@@ -94,43 +98,89 @@ function students_upsert_profile(): void
 
     $pdo = db();
 
-    $sql = 'INSERT INTO student_details (
-                student_code, name, email, phone, department, year,
-                profile_completed, payment_completion, gate_pass_created,
-                payment_approved, food_included, food_preference
-            ) VALUES (
-                :student_code, :name, :email, :phone, :department, :year,
-                :profile_completed, :payment_completion, :gate_pass_created,
-                :payment_approved, :food_included, :food_preference
-            )
-            ON DUPLICATE KEY UPDATE
-                name = VALUES(name),
-                email = VALUES(email),
-                phone = VALUES(phone),
-                department = VALUES(department),
-                year = VALUES(year),
-                profile_completed = VALUES(profile_completed),
-                payment_completion = VALUES(payment_completion),
-                gate_pass_created = VALUES(gate_pass_created),
-                payment_approved = VALUES(payment_approved),
-                food_included = VALUES(food_included),
-                food_preference = VALUES(food_preference)';
+    $email = strtolower(trim((string)($payload['email'] ?? '')));
+    $phone = trim((string)($payload['phone'] ?? ''));
+    $department = trim((string)($payload['department'] ?? ''));
+    $year = trim((string)($payload['year'] ?? ''));
+    $profileCompleted = boolish_to_int($payload['profile_completed'] ?? true);
+    $paymentCompletion = boolish_to_int($payload['payment_completion'] ?? false);
+    $gatePassCreated = boolish_to_int($payload['gate_pass_created'] ?? false);
+    $paymentApproved = normalize_payment_approved_state($payload['payment_approved'] ?? 'pending');
+    $foodIncluded = boolish_to_int($payload['food_included'] ?? false);
+    $foodPreference = normalize_food_preference($payload['food_preference'] ?? null);
 
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute([
-        ':student_code' => $studentCode,
-        ':name' => $name,
-        ':email' => strtolower(trim((string)($payload['email'] ?? ''))),
-        ':phone' => trim((string)($payload['phone'] ?? '')),
-        ':department' => trim((string)($payload['department'] ?? '')),
-        ':year' => trim((string)($payload['year'] ?? '')),
-        ':profile_completed' => boolish_to_int($payload['profile_completed'] ?? true),
-        ':payment_completion' => boolish_to_int($payload['payment_completion'] ?? false),
-        ':gate_pass_created' => boolish_to_int($payload['gate_pass_created'] ?? false),
-        ':payment_approved' => normalize_payment_approved_state($payload['payment_approved'] ?? 'pending'),
-        ':food_included' => boolish_to_int($payload['food_included'] ?? false),
-        ':food_preference' => normalize_food_preference($payload['food_preference'] ?? null),
-    ]);
+    $lookupCode = $originalStudentCode !== '' ? $originalStudentCode : $studentCode;
+    $findExistingStmt = $pdo->prepare('SELECT id FROM student_details WHERE UPPER(TRIM(student_code)) = :student_code LIMIT 1');
+    $findExistingStmt->execute([':student_code' => $lookupCode]);
+    $existingRow = $findExistingStmt->fetch();
+
+    if (!$existingRow && $email !== '') {
+        $findByEmailStmt = $pdo->prepare('SELECT id, student_code
+                                          FROM student_details
+                                          WHERE LOWER(TRIM(email)) = :email
+                                          ORDER BY id DESC
+                                          LIMIT 1');
+        $findByEmailStmt->execute([':email' => strtolower(trim($email))]);
+        $existingByEmail = $findByEmailStmt->fetch();
+        if ($existingByEmail) {
+            $existingRow = $existingByEmail;
+            $lookupCode = strtoupper(trim((string)($existingByEmail['student_code'] ?? $lookupCode)));
+        }
+    }
+
+    if ($existingRow) {
+        $existingStatusStmt = $pdo->prepare('SELECT payment_completion, gate_pass_created, payment_approved, food_included, food_preference
+                                             FROM student_details
+                                             WHERE UPPER(TRIM(student_code)) = :student_code
+                                             ORDER BY gate_pass_created DESC, payment_completion DESC, id DESC
+                                             LIMIT 1');
+        $existingStatusStmt->execute([':student_code' => $lookupCode]);
+        $existingStatus = $existingStatusStmt->fetch();
+
+        if ($existingStatus) {
+            $paymentCompletion = boolish_to_int($existingStatus['payment_completion'] ?? 0);
+            $gatePassCreated = boolish_to_int($existingStatus['gate_pass_created'] ?? 0);
+            $paymentApproved = normalize_payment_approved_state($existingStatus['payment_approved'] ?? 'pending');
+            $foodIncluded = boolish_to_int($existingStatus['food_included'] ?? 0);
+            $foodPreference = normalize_food_preference($existingStatus['food_preference'] ?? null);
+        }
+
+        $updateStmt = $pdo->prepare('UPDATE student_details
+                                     SET student_code = :student_code,
+                                         name = :name,
+                                         email = :email,
+                                         phone = :phone,
+                                         department = :department,
+                                         year = :year,
+                                         profile_completed = :profile_completed,
+                                         payment_completion = :payment_completion,
+                                         gate_pass_created = :gate_pass_created,
+                                         payment_approved = :payment_approved,
+                                         food_included = :food_included,
+                                         food_preference = :food_preference
+                                     WHERE UPPER(TRIM(student_code)) = :lookup_student_code');
+
+        $updateStmt->execute([
+            ':student_code' => $studentCode,
+            ':name' => $name,
+            ':email' => $email,
+            ':phone' => $phone,
+            ':department' => $department,
+            ':year' => $year,
+            ':profile_completed' => $profileCompleted,
+            ':payment_completion' => $paymentCompletion,
+            ':gate_pass_created' => $gatePassCreated,
+            ':payment_approved' => $paymentApproved,
+            ':food_included' => $foodIncluded,
+            ':food_preference' => $foodPreference,
+            ':lookup_student_code' => $lookupCode,
+        ]);
+    } else {
+        json_response([
+            'success' => false,
+            'message' => 'Student record not found for update. Profile setup can only update an existing student row.'
+        ], 404);
+    }
 
     json_response(['success' => true, 'message' => 'Student profile saved']);
 }

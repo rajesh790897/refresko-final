@@ -176,6 +176,7 @@ const Login = () => {
         // Set new authentication session (localStorage already cleared at login start)
         localStorage.setItem('isAuthenticated', 'true')
         localStorage.setItem('loginEmail', data.email || data.student_code)
+        localStorage.setItem('loginStudentCode', data.student_code || studentCode)
         localStorage.setItem('prefilledProfile', JSON.stringify(prefilledProfile))
 
         if (parseBoolish(data.profile_completed)) {

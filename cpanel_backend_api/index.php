@@ -67,6 +67,10 @@ try {
         admin_login();
     }
 
+    if ($method === 'POST' && $path === '/super-admin/login') {
+        super_admin_login();
+    }
+
     if ($method === 'POST' && $path === '/admin/create') {
         admin_create();
     }

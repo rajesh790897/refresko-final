@@ -1,23 +1,96 @@
 <?php
 
+function starts_with(string $haystack, string $prefix): bool
+{
+    return $prefix !== '' && strpos($haystack, $prefix) === 0;
+}
+
+function verify_super_admin_password(string $inputPassword, string $storedPassword): bool
+{
+    $stored = trim($storedPassword);
+    if ($stored === '') {
+        return false;
+    }
+
+    $looksLikePasswordHash =
+        preg_match('/^\$2[abyx]\$\d{2}\$[\.\/A-Za-z0-9]{53}$/', $stored) === 1 ||
+        starts_with($stored, '$argon2i$') ||
+        starts_with($stored, '$argon2id$');
+
+    if ($looksLikePasswordHash) {
+        if (password_verify($inputPassword, $stored)) {
+            return true;
+        }
+
+        if (starts_with($stored, '$2a$')) {
+            $normalizedBcrypt = '$2y$' . substr($stored, 4);
+            if (password_verify($inputPassword, $normalizedBcrypt)) {
+                return true;
+            }
+        }
+
+        $cryptResult = crypt($inputPassword, $stored);
+        if (is_string($cryptResult) && $cryptResult !== '' && hash_equals($stored, $cryptResult)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    return hash_equals($stored, $inputPassword);
+}
+
 function admin_login(): void
 {
     $payload = get_json_input();
-    require_fields($payload, ['email', 'password']);
-
-    $email = strtolower(trim((string)$payload['email']));
-    $password = (string)$payload['password'];
-
-    $pdo = db();
-    $stmt = $pdo->prepare('SELECT id, display_name, email, password_hash, role, is_active FROM admin_users WHERE email = :email LIMIT 1');
-    $stmt->execute([':email' => $email]);
-    $admin = $stmt->fetch();
-
-    if (!$admin || (int)$admin['is_active'] !== 1) {
-        json_response(['success' => false, 'message' => 'Invalid credentials'], 401);
+    if (!isset($payload['password']) || (!isset($payload['email']) && !isset($payload['username']))) {
+        json_response(['success' => false, 'message' => 'Missing required fields'], 422);
     }
 
-    if (!password_verify($password, (string)$admin['password_hash'])) {
+    $identity = strtolower(trim((string)($payload['email'] ?? $payload['username'] ?? '')));
+    $password = (string)$payload['password'];
+
+    if ($identity === '') {
+        json_response(['success' => false, 'message' => 'Email or username is required'], 422);
+    }
+
+    $pdo = db();
+
+    try {
+        $superStmt = $pdo->prepare(
+            'SELECT id, username, password, full_name, email, is_active
+             FROM super_admin_credentials
+             WHERE LOWER(username) = :identity OR LOWER(email) = :identity
+             LIMIT 1'
+        );
+        $superStmt->execute([':identity' => $identity]);
+        $superAdmin = $superStmt->fetch();
+
+        if ($superAdmin && (int)$superAdmin['is_active'] === 1) {
+            $storedPassword = (string)($superAdmin['password'] ?? '');
+            $passwordMatches = verify_super_admin_password($password, $storedPassword);
+
+            if ($passwordMatches) {
+                json_response([
+                    'success' => true,
+                    'admin' => [
+                        'id' => $superAdmin['id'],
+                        'username' => $superAdmin['username'],
+                        'name' => $superAdmin['full_name'] ?: $superAdmin['username'],
+                        'email' => $superAdmin['email'],
+                        'role' => 'superadmin',
+                    ]
+                ]);
+            }
+        }
+    } catch (Throwable $error) {
+    }
+
+    $stmt = $pdo->prepare('SELECT id, display_name, email, password_hash, role, is_active FROM admin_users WHERE LOWER(email) = :identity LIMIT 1');
+    $stmt->execute([':identity' => $identity]);
+    $admin = $stmt->fetch();
+
+    if (!$admin || (int)$admin['is_active'] !== 1 || !password_verify($password, (string)$admin['password_hash'])) {
         json_response(['success' => false, 'message' => 'Invalid credentials'], 401);
     }
 
@@ -28,6 +101,52 @@ function admin_login(): void
             'name' => $admin['display_name'] ?: $admin['email'],
             'email' => $admin['email'],
             'role' => $admin['role'],
+        ]
+    ]);
+}
+
+function super_admin_login(): void
+{
+    $payload = get_json_input();
+    require_fields($payload, ['username', 'password']);
+
+    $username = trim((string)$payload['username']);
+    $normalizedUsername = strtolower($username);
+    $password = (string)$payload['password'];
+
+    if ($normalizedUsername === '') {
+        json_response(['success' => false, 'message' => 'Username is required'], 422);
+    }
+
+    $pdo = db();
+    $stmt = $pdo->prepare(
+        'SELECT id, username, password, full_name, email, is_active
+         FROM super_admin_credentials
+         WHERE LOWER(username) = :username OR LOWER(email) = :username
+         LIMIT 1'
+    );
+    $stmt->execute([':username' => $normalizedUsername]);
+    $superAdmin = $stmt->fetch();
+
+    if (!$superAdmin || (int)$superAdmin['is_active'] !== 1) {
+        json_response(['success' => false, 'message' => 'Invalid credentials'], 401);
+    }
+
+    $storedPassword = (string)($superAdmin['password'] ?? '');
+    $passwordMatches = verify_super_admin_password($password, $storedPassword);
+
+    if (!$passwordMatches) {
+        json_response(['success' => false, 'message' => 'Invalid credentials'], 401);
+    }
+
+    json_response([
+        'success' => true,
+        'admin' => [
+            'id' => $superAdmin['id'],
+            'username' => $superAdmin['username'],
+            'name' => $superAdmin['full_name'] ?: $superAdmin['username'],
+            'email' => $superAdmin['email'],
+            'role' => 'superadmin',
         ]
     ]);
 }

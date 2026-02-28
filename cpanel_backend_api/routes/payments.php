@@ -1,5 +1,131 @@
 <?php
 
+function upsert_student_details_on_payment_submit(
+    PDO $pdo,
+    string $studentCode,
+    string $studentName,
+    ?string $email,
+    ?string $department,
+    ?string $year,
+    bool $foodIncluded,
+    ?string $foodPreference
+): void {
+    $normalizedCode = strtoupper(trim($studentCode));
+    $normalizedEmail = strtolower(trim((string)$email));
+
+    $updateByCode = $pdo->prepare('UPDATE student_details
+                                   SET name = :name,
+                                       email = :email,
+                                       department = :department,
+                                       year = :year,
+                                       profile_completed = 1,
+                                       payment_completion = 1,
+                                       gate_pass_created = 0,
+                                       payment_approved = :payment_approved,
+                                       food_included = :food_included,
+                                       food_preference = :food_preference
+                                   WHERE UPPER(TRIM(student_code)) = :student_code');
+    $updateByCode->execute([
+        ':name' => $studentName,
+        ':email' => $email,
+        ':department' => $department,
+        ':year' => $year,
+        ':payment_approved' => 'pending',
+        ':food_included' => bool_to_int($foodIncluded),
+        ':food_preference' => $foodPreference,
+        ':student_code' => $normalizedCode,
+    ]);
+
+    if ($updateByCode->rowCount() > 0) {
+        return;
+    }
+
+    if ($normalizedEmail !== '') {
+        $updateByEmail = $pdo->prepare('UPDATE student_details
+                                        SET student_code = :student_code,
+                                            name = :name,
+                                            email = :email,
+                                            department = :department,
+                                            year = :year,
+                                            profile_completed = 1,
+                                            payment_completion = 1,
+                                            gate_pass_created = 0,
+                                            payment_approved = :payment_approved,
+                                            food_included = :food_included,
+                                            food_preference = :food_preference
+                                        WHERE LOWER(TRIM(email)) = :lookup_email');
+        $updateByEmail->execute([
+            ':student_code' => $normalizedCode,
+            ':name' => $studentName,
+            ':email' => $email,
+            ':department' => $department,
+            ':year' => $year,
+            ':payment_approved' => 'pending',
+            ':food_included' => bool_to_int($foodIncluded),
+            ':food_preference' => $foodPreference,
+            ':lookup_email' => $normalizedEmail,
+        ]);
+
+        if ($updateByEmail->rowCount() > 0) {
+            return;
+        }
+    }
+
+    $insertStmt = $pdo->prepare('INSERT INTO student_details (
+                                     student_code,
+                                     name,
+                                     email,
+                                     phone,
+                                     department,
+                                     year,
+                                     profile_completed,
+                                     payment_completion,
+                                     gate_pass_created,
+                                     payment_approved,
+                                     food_included,
+                                     food_preference
+                                 ) VALUES (
+                                     :student_code,
+                                     :name,
+                                     :email,
+                                     NULL,
+                                     :department,
+                                     :year,
+                                     1,
+                                     1,
+                                     0,
+                                     :payment_approved,
+                                     :food_included,
+                                     :food_preference
+                                 )');
+    $insertStmt->execute([
+        ':student_code' => $normalizedCode,
+        ':name' => $studentName,
+        ':email' => $email,
+        ':department' => $department,
+        ':year' => $year,
+        ':payment_approved' => 'pending',
+        ':food_included' => bool_to_int($foodIncluded),
+        ':food_preference' => $foodPreference,
+    ]);
+}
+
+function update_student_details_on_payment_decision(PDO $pdo, string $studentCode, string $decision): void
+{
+    $gatePassCreated = ($decision === 'approved') ? 1 : 0;
+
+    $stmt = $pdo->prepare('UPDATE student_details
+                           SET payment_completion = 1,
+                               gate_pass_created = :gate_pass_created,
+                               payment_approved = :payment_approved
+                           WHERE UPPER(TRIM(student_code)) = :student_code');
+    $stmt->execute([
+        ':gate_pass_created' => $gatePassCreated,
+        ':payment_approved' => $decision,
+        ':student_code' => strtoupper(trim($studentCode)),
+    ]);
+}
+
 function resolve_payments_student_table(PDO $pdo): string
 {
     $fallback = 'student_details';
@@ -156,7 +282,19 @@ function payments_submit_with_upload(): void
         
         $proof = store_payment_proof('screenshot');
 
-        $studentUpsert = $pdo->prepare("INSERT INTO {$studentTable} (
+        if ($studentTable === 'student_details') {
+            upsert_student_details_on_payment_submit(
+                $pdo,
+                $studentCode,
+                $studentName,
+                $email !== '' ? $email : null,
+                $department !== '' ? $department : null,
+                $year !== '' ? $year : null,
+                $foodIncluded,
+                $foodPreference
+            );
+        } else {
+            $studentUpsert = $pdo->prepare("INSERT INTO {$studentTable} (
                                             student_code,
                                             name,
                                             email,
@@ -195,17 +333,18 @@ function payments_submit_with_upload(): void
                                             food_included = VALUES(food_included),
                                             food_preference = VALUES(food_preference)");
 
-        $studentUpsert->execute([
-            ':student_code' => $studentCode,
-            ':name' => $studentName,
-            ':email' => $email !== '' ? $email : null,
-            ':phone' => null,
-            ':department' => $department !== '' ? $department : null,
-            ':year' => $year !== '' ? $year : null,
-            ':payment_approved' => 'pending',
-            ':food_included' => bool_to_int($foodIncluded),
-            ':food_preference' => $foodPreference,
-        ]);
+            $studentUpsert->execute([
+                ':student_code' => $studentCode,
+                ':name' => $studentName,
+                ':email' => $email !== '' ? $email : null,
+                ':phone' => null,
+                ':department' => $department !== '' ? $department : null,
+                ':year' => $year !== '' ? $year : null,
+                ':payment_approved' => 'pending',
+                ':food_included' => bool_to_int($foodIncluded),
+                ':food_preference' => $foodPreference,
+            ]);
+        }
 
         $checkUtr = $pdo->prepare('SELECT student_code FROM used_utr_registry WHERE utr_no = :utr_no LIMIT 1');
         $checkUtr->execute([':utr_no' => $utrNo]);
@@ -256,13 +395,26 @@ function payments_submit_with_upload(): void
                                             payment_approved = :payment_approved,
                                             food_included = :food_included,
                                             food_preference = :food_preference
-                                        WHERE student_code = :student_code");
+                                        WHERE UPPER(TRIM(student_code)) = :student_code");
         $studentUpdate->execute([
             ':payment_approved' => 'pending',
             ':food_included' => bool_to_int($foodIncluded),
             ':food_preference' => $foodPreference,
-            ':student_code' => $studentCode,
+            ':student_code' => strtoupper(trim($studentCode)),
         ]);
+
+        if ($studentTable !== 'student_details') {
+            upsert_student_details_on_payment_submit(
+                $pdo,
+                $studentCode,
+                $studentName,
+                $email !== '' ? $email : null,
+                $department !== '' ? $department : null,
+                $year !== '' ? $year : null,
+                $foodIncluded,
+                $foodPreference
+            );
+        }
 
         $pdo->commit();
 
@@ -307,7 +459,7 @@ function payments_update_status(): void
 
     $nextStatus = $decision === 'approved' ? 'completed' : 'declined';
     $gatePassCreated = ($decision === 'approved') ? 1 : 0;
-    $paymentCompletion = ($decision !== 'declined') ? 1 : 0;
+    $paymentCompletion = 1;
 
     $pdo = db();
     $studentTable = resolve_payments_student_table($pdo);
@@ -339,15 +491,17 @@ function payments_update_status(): void
                                         SET payment_completion = :payment_completion,
                                             gate_pass_created = :gate_pass_created,
                                             payment_approved = :payment_approved
-                                        WHERE student_code = :student_code");
+                                        WHERE UPPER(TRIM(student_code)) = :student_code");
         $updateStudent->execute([
             ':payment_completion' => $paymentCompletion,
             ':gate_pass_created' => $gatePassCreated,
             ':payment_approved' => $decision,
-            ':student_code' => $payment['student_code'],
+            ':student_code' => strtoupper(trim((string)$payment['student_code'])),
         ]);
 
         $rowsAffected = $updateStudent->rowCount();
+
+        update_student_details_on_payment_decision($pdo, (string)$payment['student_code'], $decision);
 
         $pdo->commit();
 

@@ -123,6 +123,12 @@ const request = async (path, { method = 'GET', headers = {}, body, query, timeou
     lastError?.message || 'Failed to connect to server after multiple attempts'
   )
   error.code = lastError?.code || 'REQUEST_FAILED'
+  if (lastError?.status) {
+    error.status = lastError.status
+  }
+  if (lastError?.payload) {
+    error.payload = lastError.payload
+  }
   error.originalError = lastError
   throw error
 }
@@ -239,6 +245,38 @@ export const cpanelApi = {
       },
       body: JSON.stringify({ email, password })
     })
+  },
+
+  superAdminLogin: async ({ username, password }) => {
+    try {
+      return await request('/super-admin/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ username, password })
+      })
+    } catch (primaryError) {
+      const status = Number(primaryError?.status || 0)
+      const message = String(primaryError?.message || '').toLowerCase()
+      const shouldFallback = status === 404 || status >= 500 || message.includes('internal server error')
+
+      if (!shouldFallback) {
+        throw primaryError
+      }
+
+      return request('/admin/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          username,
+          email: username,
+          password
+        })
+      })
+    }
   },
 
   listAdmins: async () => {

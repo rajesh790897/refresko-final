@@ -44,21 +44,22 @@ const SuperAdmin = () => {
     setLoading(true)
 
     try {
-      // Try cPanel API for admin login
+      // Try cPanel API for super admin login
       if (cpanelApi.isConfigured()) {
         try {
-          const response = await cpanelApi.adminLogin({ email: username.trim(), password })
+          const response = await cpanelApi.superAdminLogin({ username: username.trim(), password })
           if (response?.success && response?.admin) {
+            const displayIdentity = response.admin.username || response.admin.email || username.trim()
             setIsAuthenticated(true)
-            setLoggedInUser(response.admin.email)
+            setLoggedInUser(displayIdentity)
             sessionStorage.setItem('superAdminAuth', 'true')
-            sessionStorage.setItem('superAdminUsername', response.admin.email)
+            sessionStorage.setItem('superAdminUsername', displayIdentity)
             setError('')
             setLoading(false)
             return
           }
         } catch (apiError) {
-          console.warn('cPanel API login failed, checking password:', apiError)
+          console.warn('Super admin API login failed, checking fallback credentials:', apiError)
         }
       }
 

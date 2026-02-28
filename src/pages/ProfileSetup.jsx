@@ -27,13 +27,45 @@ const ProfileSetup = () => {
       return
     }
 
-    // Check if profile is already completed
-    const profileCompleted = localStorage.getItem('profileCompleted')
-    if (profileCompleted === 'true') {
-      navigate('/dashboard')
+    const verifyProfileCompletionFromDatabase = async () => {
+      if (!cpanelApi.isConfigured()) return
+
+      const loginStudentCode = localStorage.getItem('loginStudentCode')
+      const prefilledProfileRawInner = localStorage.getItem('prefilledProfile')
+      let prefilledStudentCode = ''
+
+      if (prefilledProfileRawInner) {
+        try {
+          const prefilled = JSON.parse(prefilledProfileRawInner)
+          prefilledStudentCode = String(prefilled?.studentId || '').trim().toUpperCase()
+        } catch {
+          prefilledStudentCode = ''
+        }
+      }
+
+      const studentCode = String(loginStudentCode || prefilledStudentCode || '').trim().toUpperCase()
+      if (!studentCode) return
+
+      try {
+        const response = await cpanelApi.getStudentByCode(studentCode)
+        const dbCompleted = response?.success && response?.student?.profile_completed
+          ? String(response.student.profile_completed) === '1' || response.student.profile_completed === true
+          : false
+
+        if (dbCompleted) {
+          localStorage.setItem('profileCompleted', 'true')
+          navigate('/dashboard')
+        } else {
+          localStorage.removeItem('profileCompleted')
+        }
+      } catch {
+      }
     }
 
+    verifyProfileCompletionFromDatabase()
+
     const prefilledProfileRaw = localStorage.getItem('prefilledProfile')
+    const loginStudentCode = localStorage.getItem('loginStudentCode')
     if (prefilledProfileRaw) {
       try {
         const prefilledProfile = JSON.parse(prefilledProfileRaw)
@@ -53,6 +85,8 @@ const ProfileSetup = () => {
       } catch {
         // Ignore parsing errors and continue with empty form
       }
+    } else if (loginStudentCode) {
+      setOriginalStudentCode(String(loginStudentCode).trim().toUpperCase())
     }
 
     const hydrateDepartmentFromDatabase = async () => {
@@ -149,6 +183,7 @@ const ProfileSetup = () => {
         const payload = {
           name: formData.name.trim(),
           student_code: currentCode.toUpperCase(),
+          original_student_code: (originalStudentCode || currentCode).trim().toUpperCase(),
           email: formData.email.trim().toLowerCase(),
           phone: formData.phone.trim(),
           department: formData.department.trim(),
@@ -184,6 +219,7 @@ const ProfileSetup = () => {
       // Save profile data to localStorage
       localStorage.setItem('studentProfile', JSON.stringify(formData))
       localStorage.setItem('prefilledProfile', JSON.stringify(formData))
+      localStorage.setItem('loginStudentCode', formData.studentId.trim().toUpperCase())
       localStorage.setItem('profileCompleted', 'true')
       
       // Redirect to dashboard

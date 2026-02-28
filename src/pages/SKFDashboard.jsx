@@ -201,6 +201,45 @@ const SKFDashboard = () => {
       navigate('/profile-setup')
       return
     }
+
+    const verifyProfileCompletionFromDatabase = async () => {
+      if (!cpanelApi.isConfigured()) return
+
+      const loginStudentCode = localStorage.getItem('loginStudentCode')
+      const prefilledProfileRaw = localStorage.getItem('prefilledProfile')
+      let fallbackStudentCode = ''
+
+      if (prefilledProfileRaw) {
+        try {
+          const prefilled = JSON.parse(prefilledProfileRaw)
+          fallbackStudentCode = String(prefilled?.studentId || '').trim().toUpperCase()
+        } catch {
+          fallbackStudentCode = ''
+        }
+      }
+
+      const studentCode = String(loginStudentCode || fallbackStudentCode || '').trim().toUpperCase()
+      if (!studentCode) return
+
+      try {
+        const response = await cpanelApi.getStudentByCode(studentCode)
+        const dbCompleted = response?.success && response?.student?.profile_completed
+          ? String(response.student.profile_completed) === '1' || response.student.profile_completed === true
+          : false
+
+        if (!dbCompleted) {
+          localStorage.removeItem('profileCompleted')
+          localStorage.removeItem('studentProfile')
+          navigate('/profile-setup')
+          return
+        }
+
+        localStorage.setItem('profileCompleted', 'true')
+      } catch {
+      }
+    }
+
+    verifyProfileCompletionFromDatabase()
     
     // Load student profile from localStorage
     const savedProfile = localStorage.getItem('studentProfile')
@@ -302,6 +341,7 @@ const SKFDashboard = () => {
     localStorage.removeItem('profileCompleted')
     localStorage.removeItem('studentProfile')
     localStorage.removeItem('loginEmail')
+    localStorage.removeItem('loginStudentCode')
     
     // Redirect to home
     navigate('/')
