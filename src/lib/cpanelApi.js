@@ -1,4 +1,5 @@
-const API_BASE_URL = (import.meta.env.VITE_CPANEL_API_BASE_URL || '').replace(/\/$/, '')
+const RAW_API_BASE_URL = (import.meta.env.VITE_CPANEL_API_BASE_URL || '').replace(/\/$/, '')
+const API_BASE_URL = import.meta.env.DEV ? '/api' : RAW_API_BASE_URL
 const SUPERADMIN_TOKEN = import.meta.env.VITE_CPANEL_SUPERADMIN_TOKEN || ''
 const REQUEST_TIMEOUT = 15000 // 15 seconds
 const MAX_RETRIES = 3
@@ -49,7 +50,7 @@ const request = async (path, { method = 'GET', headers = {}, body, query, timeou
         method,
         body,
         mode: 'cors',
-        credentials: 'include'
+        credentials: 'omit' // Changed from 'include' to avoid CORS duplicate header issues
       }
 
       // Only include headers if not FormData
@@ -88,19 +89,31 @@ const request = async (path, { method = 'GET', headers = {}, body, query, timeou
       }
     } catch (error) {
       lastError = error
+
+      const messageText = String(error?.message || '')
+      const isIntegrityConstraintError =
+        messageText.includes('SQLSTATE[23000]') ||
+        messageText.includes('Integrity constraint violation') ||
+        messageText.includes('foreign key constraint fails')
       
       // Don't retry on certain errors
-      if (error.code === 'CPANEL_API_BASE_URL_MISSING' || error.status === 401 || error.status === 403) {
+      if (error.code === 'CPANEL_API_BASE_URL_MISSING' || error.status === 401 || error.status === 403 || error.status === 404 || isIntegrityConstraintError) {
         throw error
       }
 
-      // Log retry attempt
-      if (attempt < MAX_RETRIES) {
+      // Check if it's a CORS error and don't log excessively
+      const isCorsError = error.message?.includes('CORS') || error.message?.includes('blocked')
+      
+      // Log retry attempt (suppress for CORS errors after first attempt)
+      if (attempt < MAX_RETRIES && (!isCorsError || attempt === 1)) {
         const delay = RETRY_DELAY_MS * attempt
         console.warn(`API request failed (attempt ${attempt}/${MAX_RETRIES}), retrying in ${delay}ms...`, error.message)
         
         // Wait before retrying with exponential backoff
         await new Promise(resolve => setTimeout(resolve, delay))
+      } else if (attempt < MAX_RETRIES) {
+        // Still wait even if not logging
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS * attempt))
       }
     }
   }
@@ -167,6 +180,28 @@ export const cpanelApi = {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(payload)
+    })
+  },
+
+  getStudentByCode: async (studentCode) => {
+    if (!studentCode) {
+      throw new Error('Student code is required')
+    }
+    return request('/students/get', {
+      query: { student_code: studentCode }
+    })
+  },
+
+  updateStudent: async (studentData) => {
+    if (!studentData?.student_code) {
+      throw new Error('Student code is required')
+    }
+    return request('/students/upsert', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(studentData)
     })
   },
 

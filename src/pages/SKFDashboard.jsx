@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import QRCode from 'qrcode'
-import { isSupabaseConfigured, supabase } from '../lib/supabaseClient'
 import { cpanelApi } from '../lib/cpanelApi'
 import { getActivePaymentOption, loadPaymentConfig } from '../lib/paymentConfig'
 import { loadPaymentConfigWithApi } from '../lib/paymentConfigApi'
@@ -43,55 +42,22 @@ const SKFDashboard = () => {
     if (!studentCode) return null
 
     try {
-      let studentRecord = null
-
-      if (isSupabaseConfigured && supabase) {
-        const { data: studentData, error: studentError } = await supabase
-          .from('students')
-          .select('payment_completion, gate_pass_created, payment_approved')
-          .eq('student_code', studentCode.trim().toUpperCase())
-          .single()
-
-        if (!studentError && studentData) {
-          studentRecord = studentData
-        }
-      }
-
-      // Try cPanel API first
+      // Try cPanel API
       if (cpanelApi.isConfigured()) {
         try {
-          const response = await cpanelApi.listPayments()
-          if (response.success && Array.isArray(response.payments)) {
-            const studentPayment = response.payments
-              .filter(p => (p.student_code || '').trim().toUpperCase() === studentCode.trim().toUpperCase())
-              .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))[0]
-            
-            if (studentPayment) {
-              return {
-                status: studentPayment.status,
-                payment_approved: studentRecord?.payment_approved || studentPayment.payment_approved,
-                payment_completion: Boolean(studentRecord?.payment_completion),
-                amount: studentPayment.amount,
-                utrNo: studentPayment.utr_no,
-                transactionId: studentPayment.utr_no,
-                date: studentPayment.created_at
-              }
+          const studentResponse = await cpanelApi.getStudentByCode(studentCode)
+          if (studentResponse?.success && studentResponse?.student) {
+            const data = studentResponse.student
+            return {
+              status: data.payment_completion ? 'completed' : 'pending',
+              payment_approved: data.payment_approved || 'pending',
+              payment_completion: Boolean(data.payment_completion === 1 || data.payment_completion === true),
+              gate_pass_created: Boolean(data.gate_pass_created === 1 || data.gate_pass_created === true),
+              amount: configuredPaymentAmount
             }
           }
         } catch (apiError) {
-          console.warn('API fetch failed, trying Supabase:', apiError)
-        }
-      }
-
-      // Try Supabase as fallback
-      if (isSupabaseConfigured && supabase) {
-        if (studentRecord) {
-          return {
-            status: studentRecord.payment_approved === 'approved' ? 'completed' : 'pending',
-            payment_approved: studentRecord.payment_approved || 'pending',
-            payment_completion: Boolean(studentRecord.payment_completion),
-            amount: configuredPaymentAmount
-          }
+          console.warn('Failed to fetch from database:', apiError)
         }
       }
     } catch (error) {

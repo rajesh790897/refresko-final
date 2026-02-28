@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Link, useNavigate } from 'react-router-dom'
-import { supabase, isSupabaseConfigured } from '../../lib/supabaseClient'
+import { cpanelApi } from '../../lib/cpanelApi'
 import CustomCursor from '../../components/CustomCursor/CustomCursor'
 import EventManagement from '../../components/SuperAdmin/EventManagement'
 import PaymentAmountManagement from '../../components/SuperAdmin/PaymentAmountManagement'
@@ -44,47 +44,51 @@ const SuperAdmin = () => {
     setLoading(true)
 
     try {
-      if (!isSupabaseConfigured || !supabase) {
-        setError('Database connection not configured')
-        setLoading(false)
-        return
-      }
-
-      // Fetch super admin credentials from Supabase
-      const { data, error: fetchError } = await supabase
-        .from('super_admin_credentials')
-        .select('username, password')
-        .eq('username', username.trim())
-        .eq('is_active', true)
-        .single()
-
-      if (fetchError || !data) {
-        setError('Invalid username or password')
-        setLoading(false)
-        return
-      }
-
-      // Simple password comparison (in production, use hashed passwords)
-      if (data.password === password) {
-        // Update last login timestamp
+      // Try cPanel API for admin login
+      if (cpanelApi.isConfigured()) {
         try {
-          await supabase
-            .from('super_admin_credentials')
-            .update({ last_login: new Date().toISOString() })
-            .eq('username', username.trim())
-        } catch (updateError) {
-          console.warn('Could not update last login:', updateError)
+          const response = await cpanelApi.adminLogin({ email: username.trim(), password })
+          if (response?.success && response?.admin) {
+            setIsAuthenticated(true)
+            setLoggedInUser(response.admin.email)
+            sessionStorage.setItem('superAdminAuth', 'true')
+            sessionStorage.setItem('superAdminUsername', response.admin.email)
+            setError('')
+            setLoading(false)
+            return
+          }
+        } catch (apiError) {
+          console.warn('cPanel API login failed, checking password:', apiError)
         }
-
-        setIsAuthenticated(true)
-        setLoggedInUser(username)
-        sessionStorage.setItem('superAdminAuth', 'true')
-        sessionStorage.setItem('superAdminUsername', username)
-        setUsername('')
-        setPassword('')
-      } else {
-        setError('Invalid username or password')
       }
+
+      // Fallback: Check stored admin credentials
+      try {
+        const savedAdminAccounts = localStorage.getItem('adminAccounts')
+        const adminAccounts = savedAdminAccounts ? JSON.parse(savedAdminAccounts) : []
+        
+        const matchingAdmin = adminAccounts.find(
+          (admin) => 
+            admin.email === username.trim().toLowerCase() &&
+            admin.password === password &&
+            admin.status === 'active'
+        )
+
+        if (matchingAdmin) {
+          setIsAuthenticated(true)
+          setLoggedInUser(matchingAdmin.email)
+          sessionStorage.setItem('superAdminAuth', 'true')
+          sessionStorage.setItem('superAdminUsername', matchingAdmin.email)
+          setError('')
+          setLoading(false)
+          return
+        }
+      } catch (localStorageError) {
+        console.warn('localStorage check failed:', localStorageError)
+      }
+
+      setError('Invalid username or password')
+      setLoading(false)
     } catch (err) {
       console.error('Login error:', err)
       setError('Login failed. Please try again.')

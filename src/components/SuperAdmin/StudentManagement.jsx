@@ -1,7 +1,7 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
-import { isSupabaseConfigured, supabase } from '../../lib/supabaseClient'
+import { cpanelApi } from '../../lib/cpanelApi'
 import './StudentManagement.css'
 
 const PAGE_SIZE = 50
@@ -44,42 +44,61 @@ const StudentManagement = () => {
 
   useEffect(() => {
     const fetchStudents = async () => {
-      if (!isSupabaseConfigured || !supabase) {
+      if (!cpanelApi.isConfigured()) {
         setStudents([])
         return
       }
 
-      const pageSize = 1000
-      let from = 0
-      let allRows = []
+      try {
+        const batchSize = 500
+        let offset = 0
+        let allRows = []
+        const maxPages = 20
 
-      while (true) {
-        const to = from + pageSize - 1
-        const { data, error } = await supabase
-          .from('students')
-          .select('id, student_code, name, email, phone, department, year, profile_completed, payment_completion, gate_pass_created, payment_approved, updated_at')
-          .order('student_code', { ascending: true })
-          .range(from, to)
+        for (let pageCount = 0; pageCount < maxPages; pageCount++) {
+          const response = await cpanelApi.listPayments({ limit: batchSize, offset })
+          const chunk = Array.isArray(response?.payments) ? response.payments : []
 
-        if (error) {
-          setStudents([])
-          return
+          if (chunk.length === 0) {
+            break
+          }
+
+          allRows = allRows.concat(chunk)
+          offset += chunk.length
+
+          if (response?.has_more !== true || chunk.length < batchSize) {
+            break
+          }
         }
 
-        if (!data || data.length === 0) {
-          break
-        }
+        const studentMap = new Map()
+        allRows.forEach((payment) => {
+          const studentCode = payment.student_code
+          if (!studentCode || studentMap.has(studentCode)) return
 
-        allRows = allRows.concat(data)
+          studentMap.set(studentCode, {
+            id: studentCode,
+            name: payment.student_name || 'N/A',
+            email: payment.email || 'N/A',
+            phone: payment.phone || 'N/A',
+            college: 'Supreme Knowledge Foundation',
+            department: payment.department || 'N/A',
+            year: payment.year || 'N/A',
+            rollNumber: studentCode,
+            registeredEvents: [],
+            status: 'active',
+            paymentCompletion: payment.status === 'completed',
+            gatePassCreated: false,
+            paymentApproved: normalizeApprovalStatus(payment.payment_approved),
+            lastLogin: payment.created_at ? new Date(payment.created_at).toLocaleString() : 'N/A'
+          })
+        })
 
-        if (data.length < pageSize) {
-          break
-        }
-
-        from += pageSize
+        setStudents(Array.from(studentMap.values()))
+      } catch (error) {
+        console.error('Failed to fetch students:', error)
+        setStudents([])
       }
-
-      setStudents(allRows.map(mapStudentRecord))
     }
 
     fetchStudents()
@@ -141,14 +160,15 @@ const StudentManagement = () => {
   const handleSubmit = async (e) => {
     e.preventDefault()
     
-    if (!isSupabaseConfigured || !supabase) {
+    if (!cpanelApi.isConfigured()) {
       alert('Database connection not configured')
       return
     }
 
     try {
-      // Map form data to Supabase column names
+      // Map form data to cPanel API format
       const updateData = {
+        student_code: selectedStudent.id,
         name: formData.name,
         email: formData.email,
         phone: formData.phone,
@@ -156,14 +176,11 @@ const StudentManagement = () => {
         year: formData.year
       }
 
-      // Update in Supabase using student_code as the identifier
-      const { error } = await supabase
-        .from('students')
-        .update(updateData)
-        .eq('student_code', selectedStudent.id)
+      // Update via cPanel API
+      const response = await cpanelApi.updateStudent(updateData)
 
-      if (error) {
-        alert(`Update failed: ${error.message}`)
+      if (!response?.success) {
+        alert(`Update failed: ${response?.message || 'Unknown error'}`)
         return
       }
 

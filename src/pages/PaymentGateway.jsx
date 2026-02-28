@@ -3,7 +3,6 @@ import { useNavigate, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import QRCode from 'qrcode'
 import imageCompression from 'browser-image-compression'
-import { isSupabaseConfigured, supabase } from '../lib/supabaseClient'
 import { getActivePaymentOption, loadPaymentConfig } from '../lib/paymentConfig'
 import { loadPaymentConfigWithApi } from '../lib/paymentConfigApi'
 import { cpanelApi } from '../lib/cpanelApi'
@@ -34,19 +33,14 @@ const PaymentGateway = () => {
     const normalizedCode = (studentCode || '').trim().toUpperCase()
     if (!normalizedCode) return false
 
-    if (isSupabaseConfigured && supabase) {
+    if (cpanelApi.isConfigured()) {
       try {
-        const { data, error } = await supabase
-          .from('students')
-          .select('payment_completion')
-          .eq('student_code', normalizedCode)
-          .single()
-
-        if (!error) {
-          return Boolean(data?.payment_completion)
+        const response = await cpanelApi.getStudentByCode(normalizedCode)
+        if (response?.success && response?.student) {
+          return Boolean(response.student.payment_completion === 1 || response.student.payment_completion === true)
         }
       } catch (error) {
-        console.warn('Unable to verify payment completion from Supabase:', error)
+        console.warn('Unable to verify payment completion:', error)
       }
     }
 
@@ -338,8 +332,10 @@ const PaymentGateway = () => {
       } catch (apiError) {
         console.error('Payment submission to database failed:', apiError)
         const errorMessage = apiError.message || apiError.toString()
+        delete usedUtrRegistry[normalizedUtr]
+        localStorage.setItem('usedUtrRegistry', JSON.stringify(usedUtrRegistry))
         setFormError(`Payment submission failed: ${errorMessage}. Your payment data will be saved locally, but may not appear cross devices until the issue is resolved. Please contact support if this persists.`)
-        setPaymentStatus('idle')
+        setPaymentStatus('pending')
         return
       }
     }
@@ -411,23 +407,21 @@ const PaymentGateway = () => {
         window.dispatchEvent(new Event('paymentSubmissionsUpdated'))
       }
 
-      if (isSupabaseConfigured && supabase) {
-        try {
-          const studentCode = (studentProfile.studentId || '').trim().toUpperCase()
-          if (studentCode) {
-            await supabase
-              .from('students')
-              .update({
-                payment_completion: true,
-                gate_pass_created: false,
-                payment_approved: 'pending',
-                food_included: isFoodIncluded,
-                food_preference: effectiveFoodPreference
-              })
-              .eq('student_code', studentCode)
+      if (cpanelApi.isConfigured()) {
+        const studentCode = (studentProfile.studentId || '').trim().toUpperCase()
+        if (studentCode) {
+          try {
+            await cpanelApi.updateStudent({
+              student_code: studentCode,
+              payment_completion: 1,
+              gate_pass_created: 0,
+              payment_approved: 'pending',
+              food_included: isFoodIncluded ? 1 : 0,
+              food_preference: effectiveFoodPreference
+            })
+          } catch (error) {
+            console.error('Unable to sync payment status to database:', error)
           }
-        } catch (error) {
-          console.error('Unable to sync payment status to Supabase:', error)
         }
       }
 

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { isSupabaseConfigured, supabase } from '../lib/supabaseClient'
 import { cpanelApi } from '../lib/cpanelApi'
 import './Login.css'
 
@@ -22,7 +21,6 @@ const Login = () => {
   useEffect(() => {
     document.body.classList.add('system-cursor')
 
-    // Check if already authenticated
     const isAdminAuthenticated = localStorage.getItem('adminAuthenticated')
     const isAuthenticated = localStorage.getItem('isAuthenticated')
     const profileCompleted = localStorage.getItem('profileCompleted')
@@ -32,10 +30,9 @@ const Login = () => {
       return
     }
 
-    if (!isAdminLoginMode) {
-      if (isAuthenticated && profileCompleted === 'true') {
-        navigate('/dashboard')
-      }
+    if (!isAdminLoginMode && isAuthenticated && profileCompleted === 'true') {
+      navigate('/dashboard')
+      return
     }
 
     return () => {
@@ -131,7 +128,7 @@ const Login = () => {
         return
       }
 
-      if (!isSupabaseConfigured || !supabase) {
+      if (!cpanelApi.isConfigured()) {
         setError('Database connection failed. Please try again or contact support.')
         setIsLoading(false)
         return
@@ -141,28 +138,15 @@ const Login = () => {
         const studentCode = formData.email.trim().toUpperCase()
         const enteredPhone = normalizePhone(formData.password)
 
-        // Add timeout to Supabase query
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 15000)
+        const response = await cpanelApi.getStudentByCode(studentCode)
 
-        const { data, error: fetchError } = await supabase
-          .from('students')
-          .select('name, student_code, email, phone, department, year, profile_completed, payment_completion, gate_pass_created, payment_approved, food_included, food_preference')
-          .eq('student_code', studentCode)
-          .maybeSingle()
-
-        clearTimeout(timeoutId)
-
-        if (fetchError) {
-          throw fetchError
-        }
-
-        if (!data) {
+        if (!response?.success || !response?.student) {
           setError('Student code not found. Please check and try again.')
           setIsLoading(false)
           return
         }
 
+        const data = response.student
         const dbPhone = normalizePhone(data.phone || '')
         if (!enteredPhone || enteredPhone !== dbPhone) {
           setError('Invalid phone number. Please try again.')
@@ -177,10 +161,10 @@ const Login = () => {
           phone: data.phone || '',
           department: data.department || '',
           year: data.year || '',
-          payment_completion: data.payment_completion === true,
-          gate_pass_created: data.gate_pass_created === true,
+          payment_completion: data.payment_completion === 1 || data.payment_completion === true,
+          gate_pass_created: data.gate_pass_created === 1 || data.gate_pass_created === true,
           payment_approved: data.payment_approved || 'pending',
-          food_included: data.food_included === true,
+          food_included: data.food_included === 1 || data.food_included === true,
           food_preference: data.food_preference || null
         }
 
@@ -189,7 +173,7 @@ const Login = () => {
         localStorage.setItem('loginEmail', data.email || data.student_code)
         localStorage.setItem('prefilledProfile', JSON.stringify(prefilledProfile))
 
-        if (data.profile_completed === true) {
+        if (data.profile_completed === 1 || data.profile_completed === true) {
           localStorage.setItem('studentProfile', JSON.stringify(prefilledProfile))
           localStorage.setItem('profileCompleted', 'true')
           navigate('/dashboard')

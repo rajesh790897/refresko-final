@@ -1,5 +1,31 @@
 <?php
 
+function resolve_payments_student_table(PDO $pdo): string
+{
+    $fallback = 'student_details';
+    $allowed = ['student_details', 'students', 'students_old_backup', 'std'];
+
+    try {
+        $stmt = $pdo->prepare("SELECT REFERENCED_TABLE_NAME
+                               FROM information_schema.KEY_COLUMN_USAGE
+                               WHERE TABLE_SCHEMA = DATABASE()
+                                 AND TABLE_NAME = 'payments'
+                                 AND COLUMN_NAME = 'student_code'
+                                 AND REFERENCED_TABLE_NAME IS NOT NULL
+                               LIMIT 1");
+        $stmt->execute();
+        $tableName = (string)($stmt->fetchColumn() ?: '');
+
+        if ($tableName !== '' && in_array($tableName, $allowed, true)) {
+            return $tableName;
+        }
+    } catch (Throwable $error) {
+        error_log('Unable to resolve payments FK table, using fallback: ' . $error->getMessage());
+    }
+
+    return $fallback;
+}
+
 function payments_list(): void
 {
     $status = trim((string)($_GET['status'] ?? ''));
@@ -120,6 +146,7 @@ function payments_submit_with_upload(): void
     }
 
     $pdo = db();
+    $studentTable = resolve_payments_student_table($pdo);
     $pdo->beginTransaction();
 
     try {
@@ -129,7 +156,7 @@ function payments_submit_with_upload(): void
         
         $proof = store_payment_proof('screenshot');
 
-        $studentUpsert = $pdo->prepare('INSERT INTO students (
+        $studentUpsert = $pdo->prepare("INSERT INTO {$studentTable} (
                                             student_code,
                                             name,
                                             email,
@@ -166,7 +193,7 @@ function payments_submit_with_upload(): void
                                             gate_pass_created = VALUES(gate_pass_created),
                                             payment_approved = VALUES(payment_approved),
                                             food_included = VALUES(food_included),
-                                            food_preference = VALUES(food_preference)');
+                                            food_preference = VALUES(food_preference)");
 
         $studentUpsert->execute([
             ':student_code' => $studentCode,
@@ -223,13 +250,13 @@ function payments_submit_with_upload(): void
             ':screenshot_name' => $proof['original_name'],
         ]);
 
-        $studentUpdate = $pdo->prepare('UPDATE students
+        $studentUpdate = $pdo->prepare("UPDATE {$studentTable}
                                         SET payment_completion = 1,
                                             gate_pass_created = 0,
                                             payment_approved = :payment_approved,
                                             food_included = :food_included,
                                             food_preference = :food_preference
-                                        WHERE student_code = :student_code');
+                                        WHERE student_code = :student_code");
         $studentUpdate->execute([
             ':payment_approved' => 'pending',
             ':food_included' => bool_to_int($foodIncluded),
@@ -283,6 +310,7 @@ function payments_update_status(): void
     $paymentCompletion = ($decision !== 'declined') ? 1 : 0;
 
     $pdo = db();
+    $studentTable = resolve_payments_student_table($pdo);
     $pdo->beginTransaction();
 
     try {
@@ -307,11 +335,11 @@ function payments_update_status(): void
             ':payment_id' => $paymentId,
         ]);
 
-        $updateStudent = $pdo->prepare('UPDATE students
+        $updateStudent = $pdo->prepare("UPDATE {$studentTable}
                                         SET payment_completion = :payment_completion,
                                             gate_pass_created = :gate_pass_created,
                                             payment_approved = :payment_approved
-                                        WHERE student_code = :student_code');
+                                        WHERE student_code = :student_code");
         $updateStudent->execute([
             ':payment_completion' => $paymentCompletion,
             ':gate_pass_created' => $gatePassCreated,

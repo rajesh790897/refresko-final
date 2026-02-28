@@ -47,14 +47,14 @@ const performers = [
   },
   // https://admin.hire4event.com/assets/artistimage/1-65617b79890e0.webp
         {
-    id: 6,
+    id: 7,
     name: 'Snigdhajit Bhowmik',
     role: 'Performer',
     // year: '2024',
     image: 'https://admin.hire4event.com/assets/artistimage/1-65617b79890e0.webp'
   },
   {
-    id: 7,
+    id: 8,
     name: 'NANDY SISTERS',
     role: 'Musical Duo',
     // year: '2025',

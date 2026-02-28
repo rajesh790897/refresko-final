@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
-import { isSupabaseConfigured, supabase } from '../../lib/supabaseClient'
 import { cpanelApi } from '../../lib/cpanelApi'
 import './PaymentManagement.css'
 
@@ -325,20 +324,18 @@ const PaymentManagement = () => {
         const apiResponse = await cpanelApi.updatePaymentDecision({ paymentId, decision: status })
         console.log('API Response:', apiResponse)
 
-        // Sync to Supabase if configured
-        if (isSupabaseConfigured && supabase && studentCode) {
+        // Sync student record if configured
+        if (cpanelApi.isConfigured() && studentCode) {
           try {
-            const supabaseResult = await supabase
-              .from('students')
-              .update({
-                payment_completion: status === 'declined' ? false : true,
-                gate_pass_created: status === 'approved' ? true : false,
-                payment_approved: status === 'approved' ? 'approved' : 'declined'
-              })
-              .eq('student_code', studentCode)
-            console.log('Supabase synced successfully for:', studentCode, supabaseResult)
-          } catch (supabaseError) {
-            console.error('Unable to sync admin payment decision to Supabase:', supabaseError)
+            const studentUpdate = await cpanelApi.updateStudent({
+              student_code: studentCode,
+              payment_completion: status === 'declined' ? 0 : 1,
+              gate_pass_created: status === 'approved' ? 1 : 0,
+              payment_approved: status === 'approved' ? 'approved' : 'declined'
+            })
+            console.log('Student record synced successfully for:', studentCode, studentUpdate)
+          } catch (updateError) {
+            console.error('Unable to sync admin payment decision to database:', updateError)
           }
         }
 
@@ -444,21 +441,19 @@ const PaymentManagement = () => {
           }
         }
 
-        if (isSupabaseConfigured && supabase) {
+        if (cpanelApi.isConfigured()) {
           try {
             const studentCode = (updatedPayment.studentCode || updatedPayment.studentId || '').trim().toUpperCase()
             if (studentCode) {
-              await supabase
-                .from('students')
-                .update({
-                  payment_completion: status === 'declined' ? false : true,
-                  gate_pass_created: status === 'approved',
-                  payment_approved: status === 'approved' ? 'approved' : 'declined'
-                })
-                .eq('student_code', studentCode)
+              await cpanelApi.updateStudent({
+                student_code: studentCode,
+                payment_completion: status === 'declined' ? 0 : 1,
+                gate_pass_created: status === 'approved' ? 1 : 0,
+                payment_approved: status === 'approved' ? 'approved' : 'declined'
+              })
             }
           } catch (error) {
-            console.error('Unable to sync admin payment decision to Supabase:', error)
+            console.error('Unable to sync admin payment decision to database:', error)
           }
         }
       }

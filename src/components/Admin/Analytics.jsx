@@ -1,12 +1,10 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cpanelApi } from '../../lib/cpanelApi'
-import { supabase, isSupabaseConfigured } from '../../lib/supabaseClient'
 import jsPDF from 'jspdf'
 import 'jspdf-autotable'
 import './Analytics.css'
 
-const SUPABASE_BATCH_SIZE = 1000
 const CPANEL_BATCH_SIZE = 500
 
 const normalizeText = (value, fallback = '') => {
@@ -66,39 +64,6 @@ const Analytics = () => {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 50
 
-  const fetchAllSupabaseRows = async (tableName) => {
-    if (!isSupabaseConfigured || !supabase) return []
-
-    let from = 0
-    const allRows = []
-
-    while (true) {
-      const { data, error } = await supabase
-        .from(tableName)
-        .select('*')
-        .range(from, from + SUPABASE_BATCH_SIZE - 1)
-
-      if (error) {
-        throw error
-      }
-
-      const rows = Array.isArray(data) ? data : []
-      if (rows.length === 0) {
-        break
-      }
-
-      allRows.push(...rows)
-
-      if (rows.length < SUPABASE_BATCH_SIZE) {
-        break
-      }
-
-      from += SUPABASE_BATCH_SIZE
-    }
-
-    return allRows
-  }
-
   const fetchAllCpanelPayments = async () => {
     if (!cpanelApi.isConfigured()) return []
 
@@ -138,28 +103,8 @@ const Analytics = () => {
       let studentsData = []
       let paymentsData = []
 
-      // Try Supabase first
-      if (isSupabaseConfigured && supabase) {
-        try {
-          const [studentsFromDB, paymentsFromDB] = await Promise.all([
-            fetchAllSupabaseRows('students'),
-            fetchAllSupabaseRows('payments')
-          ])
-
-          studentsData = studentsFromDB
-            .map(normalizeStudentRecord)
-            .filter((student) => student.student_code)
-
-          paymentsData = paymentsFromDB
-            .map(normalizePaymentRecord)
-            .filter((payment) => payment.student_code)
-        } catch (supabaseError) {
-          console.error('Supabase error:', supabaseError)
-        }
-      }
-
-      // Fallback to cPanel API if Supabase fails or not configured
-      if (studentsData.length === 0 && cpanelApi.isConfigured()) {
+      // Use cPanel API to fetch all data
+      if (cpanelApi.isConfigured()) {
         try {
           const paymentsFromApi = await fetchAllCpanelPayments()
           paymentsData = paymentsFromApi
@@ -175,7 +120,7 @@ const Analytics = () => {
               student_name: payment.student_name || 'Unknown',
               department: payment.department || 'Not specified',
               year: payment.year || 'Not specified',
-              email: '',
+              email: payment.email || '',
               phone: ''
             })
           })

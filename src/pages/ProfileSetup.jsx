@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { isSupabaseConfigured, supabase } from '../lib/supabaseClient'
+import { cpanelApi } from '../lib/cpanelApi'
 import './ProfileSetup.css'
 
 const ProfileSetup = () => {
@@ -56,7 +56,7 @@ const ProfileSetup = () => {
     }
 
     const hydrateDepartmentFromDatabase = async () => {
-      if (!isSupabaseConfigured || !supabase) return
+      if (!cpanelApi.isConfigured()) return
 
       const prefilledProfileRawInner = localStorage.getItem('prefilledProfile')
       if (!prefilledProfileRawInner) return
@@ -66,14 +66,10 @@ const ProfileSetup = () => {
         const studentCode = prefilled.studentId
         if (!studentCode) return
 
-        const { data, error } = await supabase
-          .from('students')
-          .select('department, year')
-          .eq('student_code', studentCode)
-          .maybeSingle()
+        const response = await cpanelApi.getStudentByCode(studentCode)
+        if (!response?.success || !response?.student) return
 
-        if (error || !data) return
-
+        const data = response.student
         setFormData((prev) => ({
           ...prev,
           department: data.department || prev.department,
@@ -147,8 +143,7 @@ const ProfileSetup = () => {
     e.preventDefault()
 
     if (validateForm()) {
-      if (isSupabaseConfigured && supabase) {
-        const originalCode = (originalStudentCode || '').trim()
+      if (cpanelApi.isConfigured()) {
         const currentCode = formData.studentId.trim()
 
         const payload = {
@@ -158,43 +153,29 @@ const ProfileSetup = () => {
           phone: formData.phone.trim(),
           department: formData.department.trim(),
           year: formData.year,
-          profile_completed: true,
-          payment_completion: false,
-          gate_pass_created: false,
+          profile_completed: 1,
+          payment_completion: 0,
+          gate_pass_created: 0,
           payment_approved: 'pending',
-          food_included: false,
+          food_included: 0,
           food_preference: null
         }
 
-        let updatedRows = []
-        let updateError = null
+        try {
+          const response = await cpanelApi.updateStudent(payload)
 
-        if (originalCode) {
-          const firstAttempt = await supabase
-            .from('students')
-            .update(payload)
-            .eq('student_code', originalCode)
-            .select('id')
-
-          updatedRows = firstAttempt.data || []
-          updateError = firstAttempt.error
-        }
-
-        if ((!updatedRows || updatedRows.length === 0) && currentCode && currentCode !== originalCode) {
-          const secondAttempt = await supabase
-            .from('students')
-            .update(payload)
-            .eq('student_code', currentCode)
-            .select('id')
-
-          updatedRows = secondAttempt.data || []
-          updateError = secondAttempt.error
-        }
-
-        if (updateError || !updatedRows || updatedRows.length === 0) {
+          if (!response?.success) {
+            setErrors((prev) => ({
+              ...prev,
+              studentId: 'Unable to update profile in database. Check student code or database policy.'
+            }))
+            return
+          }
+        } catch (error) {
+          console.error('Profile update error:', error)
           setErrors((prev) => ({
             ...prev,
-            studentId: 'Unable to update profile in database. Check student code or database policy.'
+            studentId: 'Unable to update profile in database. Please try again.'
           }))
           return
         }
