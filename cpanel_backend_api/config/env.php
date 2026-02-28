@@ -14,7 +14,7 @@ return [
         'https://refresko.skf.edu.in',
         'https://api-refresko.skf.edu.in',
         'http://localhost:5173',
-        'https://refresko-final.vercel.app/',
+        'https://refresko-final.vercel.app',
     ],
     'max_upload_mb' => 10,
     'upload_dir' => __DIR__ . '/../uploads/payment-proofs',
